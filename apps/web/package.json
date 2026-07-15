@@ -5,7 +5,8 @@
 	"scripts": {
 		"dev": "next dev --port 3000",
 		"build": "next build",
-		"start": "next start"
+		"start": "next start",
+		"seed:user": "bun run scripts/seed-user.ts"
 	},
 	"dependencies": {
 		"@krazil-idp/auth": "workspace:*",
