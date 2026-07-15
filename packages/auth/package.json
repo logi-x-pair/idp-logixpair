@@ -11,6 +11,7 @@
   },
   "scripts": {},
   "dependencies": {
+    "@better-auth/oauth-provider": "^1.6.23",
     "@krazil-idp/db": "workspace:*",
     "@krazil-idp/env": "workspace:*",
     "better-auth": "catalog:",

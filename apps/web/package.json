@@ -9,6 +9,7 @@
 		"seed:user": "bun run scripts/seed-user.ts"
 	},
 	"dependencies": {
+		"@better-auth/oauth-provider": "^1.6.23",
 		"@krazil-idp/auth": "workspace:*",
 		"@krazil-idp/db": "workspace:*",
 		"@krazil-idp/env": "workspace:*",
