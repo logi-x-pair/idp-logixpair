@@ -1,0 +1,3 @@
+{
+  "extends": "@krazil-idp/config/tsconfig.base.json"
+}

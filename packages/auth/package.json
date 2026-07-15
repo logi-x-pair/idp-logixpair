@@ -1,0 +1,24 @@
+{
+  "name": "@krazil-idp/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@krazil-idp/db": "workspace:*",
+    "@krazil-idp/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@krazil-idp/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
