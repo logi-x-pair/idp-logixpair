@@ -23,6 +23,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@krazil-idp/auth": "workspace:*",
+        "@krazil-idp/db": "workspace:*",
         "@krazil-idp/env": "workspace:*",
         "@krazil-idp/ui": "workspace:*",
         "@swc/helpers": "^0.5.23",
