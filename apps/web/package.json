@@ -6,13 +6,17 @@
 		"dev": "next dev --port 3000",
 		"build": "next build",
 		"start": "next start",
-		"seed:user": "bun run scripts/seed-user.ts"
+		"seed:user": "bun run scripts/seed-user.ts",
+		"seed:clients": "bun run scripts/seed-clients.ts",
+		"clients": "bun run scripts/clients.ts"
 	},
 	"dependencies": {
 		"@better-auth/oauth-provider": "^1.6.23",
 		"@krazil-idp/auth": "workspace:*",
 		"@krazil-idp/db": "workspace:*",
 		"@krazil-idp/env": "workspace:*",
+		"@krazil-idp/branding": "workspace:*",
+		"drizzle-orm": "^0.45.2",
 		"@krazil-idp/ui": "workspace:*",
 		"@swc/helpers": "^0.5.23",
 		"@tanstack/react-form": "^1.33.0",

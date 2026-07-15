@@ -1,0 +1,7 @@
+{
+	"extends": "@krazil-idp/config/tsconfig.base.json",
+	"compilerOptions": {
+		"rootDir": "."
+	},
+	"include": ["**/*.ts"]
+}

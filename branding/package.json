@@ -1,0 +1,15 @@
+{
+	"name": "@krazil-idp/branding",
+	"type": "module",
+	"exports": {
+		"./*": {
+			"default": "./*.ts"
+		},
+		"./assets/*": "./assets/*"
+	},
+	"devDependencies": {
+		"@krazil-idp/auth": "workspace:*",
+		"@krazil-idp/config": "workspace:*",
+		"typescript": "catalog:"
+	}
+}

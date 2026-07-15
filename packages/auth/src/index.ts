@@ -7,6 +7,25 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins";
 
+/** Emails allowed to manage OAuth clients (create/read/update/delete/rotate). */
+const adminEmails = new Set(
+	(env.OAUTH_ADMIN_EMAILS ?? "")
+		.split(",")
+		.map((e) => e.trim().toLowerCase())
+		.filter((e) => e.length > 0),
+);
+
+/**
+ * Client IDs served from the plugin's in-memory trusted cache. Cached clients
+ * are locked against CRUD endpoints ("trusted clients must be updated
+ * manually") and any DB change to them requires a process restart. See
+ * RUNBOOK.md for the rotate/disable procedure.
+ */
+const trustedClientIds = (env.OAUTH_TRUSTED_CLIENT_IDS ?? "")
+	.split(",")
+	.map((id) => id.trim())
+	.filter((id) => id.length > 0);
+
 export function createAuth() {
 	const db = createDb();
 
@@ -34,6 +53,15 @@ export function createAuth() {
 					page: "/sign-up",
 				},
 				scopes: ["openid", "profile", "email", "offline_access"],
+				cachedTrustedClients: new Set(trustedClientIds),
+				// All client management is operator-only on this IdP: clients are
+				// first-party and provisioned by the seed script / admin CLI.
+				clientPrivileges: ({ user }) => {
+					const email = user?.email;
+					return (
+						typeof email === "string" && adminEmails.has(email.toLowerCase())
+					);
+				},
 				...(env.OAUTH_VALID_AUDIENCES
 					? {
 							validAudiences: env.OAUTH_VALID_AUDIENCES.split(",").map((a) =>

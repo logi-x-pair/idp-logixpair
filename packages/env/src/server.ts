@@ -19,6 +19,13 @@ export const env = createEnv({
 		OAUTH_CLIENT_SECRET_PREFIX: z.string().optional(),
 		/** Enables pairwise subject identifiers when set. >=32 chars, permanent. */
 		OAUTH_PAIRWISE_SECRET: z.string().min(32).optional(),
+		/** Comma-separated client_ids cached as locked trusted clients. */
+		OAUTH_TRUSTED_CLIENT_IDS: z.string().optional(),
+		/** Comma-separated emails allowed to manage OAuth clients (CRUD/rotate). */
+		OAUTH_ADMIN_EMAILS: z.string().optional(),
+		/** Provisioning admin used by seed/CLI scripts (dev/ops only). */
+		IDP_ADMIN_EMAIL: z.string().optional(),
+		IDP_ADMIN_PASSWORD: z.string().optional(),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,
