@@ -64,6 +64,7 @@
       "name": "@krazil-idp/auth",
       "dependencies": {
         "@better-auth/oauth-provider": "^1.6.23",
+        "@krazil-idp/branding": "workspace:*",
         "@krazil-idp/db": "workspace:*",
         "@krazil-idp/env": "workspace:*",
         "better-auth": "catalog:",

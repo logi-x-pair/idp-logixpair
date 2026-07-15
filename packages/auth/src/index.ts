@@ -7,6 +7,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins";
 
+import { mailer, resetPasswordEmail, verificationEmail } from "./email";
+
 /** Emails allowed to manage OAuth clients (create/read/update/delete/rotate). */
 const adminEmails = new Set(
 	(env.OAUTH_ADMIN_EMAILS ?? "")
@@ -38,6 +40,14 @@ export function createAuth() {
 		trustedOrigins: [env.CORS_ORIGIN],
 		emailAndPassword: {
 			enabled: true,
+			sendResetPassword: async ({ user, url }) => {
+				await mailer.send(resetPasswordEmail(user.email, url));
+			},
+		},
+		emailVerification: {
+			sendVerificationEmail: async ({ user, url }) => {
+				await mailer.send(verificationEmail(user.email, url));
+			},
 		},
 		user: {
 			additionalFields: {

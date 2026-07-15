@@ -13,11 +13,11 @@
  * aborts loudly and promotes nothing.
  */
 import { auth } from "@krazil-idp/auth";
-import { env } from "@krazil-idp/env/server";
 import { db } from "@krazil-idp/db";
 import { user } from "@krazil-idp/db/schema/auth";
-import { eq } from "drizzle-orm";
+import { env } from "@krazil-idp/env/server";
 import { APIError } from "better-auth";
+import { eq } from "drizzle-orm";
 
 const email = env.IDP_ADMIN_EMAIL;
 const password = env.IDP_ADMIN_PASSWORD;

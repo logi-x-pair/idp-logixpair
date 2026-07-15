@@ -1,25 +1,26 @@
 {
-  "name": "@krazil-idp/auth",
-  "type": "module",
-  "exports": {
-    ".": {
-      "default": "./src/index.ts"
-    },
-    "./*": {
-      "default": "./src/*.ts"
-    }
-  },
-  "scripts": {},
-  "dependencies": {
-    "@better-auth/oauth-provider": "^1.6.23",
-    "@krazil-idp/db": "workspace:*",
-    "@krazil-idp/env": "workspace:*",
-    "better-auth": "catalog:",
-    "dotenv": "catalog:",
-    "zod": "catalog:"
-  },
-  "devDependencies": {
-    "@krazil-idp/config": "workspace:*",
-    "typescript": "catalog:"
-  }
+	"name": "@krazil-idp/auth",
+	"type": "module",
+	"exports": {
+		".": {
+			"default": "./src/index.ts"
+		},
+		"./*": {
+			"default": "./src/*.ts"
+		}
+	},
+	"scripts": {},
+	"dependencies": {
+		"@better-auth/oauth-provider": "^1.6.23",
+		"@krazil-idp/branding": "workspace:*",
+		"@krazil-idp/db": "workspace:*",
+		"@krazil-idp/env": "workspace:*",
+		"better-auth": "catalog:",
+		"dotenv": "catalog:",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@krazil-idp/config": "workspace:*",
+		"typescript": "catalog:"
+	}
 }

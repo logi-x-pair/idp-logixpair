@@ -7,9 +7,9 @@
  * provision the operator (which also verifies account ownership).
  */
 import { auth } from "@krazil-idp/auth";
-import { env } from "@krazil-idp/env/server";
 import { db } from "@krazil-idp/db";
 import { user } from "@krazil-idp/db/schema/auth";
+import { env } from "@krazil-idp/env/server";
 import { eq } from "drizzle-orm";
 
 export async function adminHeaders(): Promise<Headers> {

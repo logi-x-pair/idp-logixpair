@@ -1,40 +1,30 @@
+import { branding } from "@krazil-idp/branding/config";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 
 import "../index.css";
-import Header from "@/components/header";
 import Providers from "@/components/providers";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { brandCssVariables } from "@/lib/branding-css";
 
 export const metadata: Metadata = {
-  title: "krazil-idp",
-  description: "krazil-idp",
+	title: branding.brandName,
+	description: `${branding.brandName} — single sign-on`,
+	icons: [{ url: branding.favicon }],
 };
 
 export default function RootLayout({
-  children,
+	children,
 }: Readonly<{
-  children: React.ReactNode;
+	children: React.ReactNode;
 }>) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Providers>
-          <div className="grid grid-rows-[auto_1fr] h-svh">
-            <Header />
-            {children}
-          </div>
-        </Providers>
-      </body>
-    </html>
-  );
+	return (
+		<html lang="en" suppressHydrationWarning>
+			<head>
+				{/* Brand variables: generated from branding/config.ts (single source of truth). */}
+				<style>{brandCssVariables()}</style>
+			</head>
+			<body className="antialiased">
+				<Providers>{children}</Providers>
+			</body>
+		</html>
+	);
 }
