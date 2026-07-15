@@ -39,6 +39,17 @@ export function createAuth() {
 		emailAndPassword: {
 			enabled: true,
 		},
+		user: {
+			additionalFields: {
+				// Operator role. `input: false` = NEVER settable through public
+				// sign-up; only server-side provisioning (seed:admin) assigns it.
+				role: {
+					type: "string",
+					defaultValue: "user",
+					input: false,
+				},
+			},
+		},
 		secret: env.BETTER_AUTH_SECRET,
 		baseURL: env.BETTER_AUTH_URL,
 		// The JWT plugin exposes a session-token endpoint at /token; the OAuth
@@ -56,10 +67,14 @@ export function createAuth() {
 				cachedTrustedClients: new Set(trustedClientIds),
 				// All client management is operator-only on this IdP: clients are
 				// first-party and provisioned by the seed script / admin CLI.
+				// Requires BOTH the server-assigned admin role (not settable via
+				// public sign-up) AND membership in the OAUTH_ADMIN_EMAILS list.
 				clientPrivileges: ({ user }) => {
 					const email = user?.email;
 					return (
-						typeof email === "string" && adminEmails.has(email.toLowerCase())
+						user?.role === "admin" &&
+						typeof email === "string" &&
+						adminEmails.has(email.toLowerCase())
 					);
 				},
 				...(env.OAUTH_VALID_AUDIENCES
