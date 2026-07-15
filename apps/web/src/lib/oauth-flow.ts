@@ -1,5 +1,7 @@
 "use client";
 
+import type { Route } from "next";
+
 /**
  * Helpers for pages that participate in the OAuth authorization flow.
  *
@@ -17,6 +19,6 @@ export function inOAuthFlow(): boolean {
 }
 
 /** Path with the current query string preserved (keeps `oauth_query` intact). */
-export function withCurrentQuery(path: string): string {
-	return `${path}${window.location.search}`;
+export function withCurrentQuery(path: Route): Route {
+	return `${path}${window.location.search}` as Route;
 }
