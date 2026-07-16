@@ -31,6 +31,32 @@ const redirectUri = requiredEnv("RP_REDIRECT_URI");
 const postLogoutRedirectUri = requiredEnv("RP_POST_LOGOUT_URI");
 const peerLogoutUrl = process.env.RP_PEER_LOGOUT_URL;
 
+const ACCESS_TOKEN_MODES = ["short-lived", "hybrid", "immediate"] as const;
+type AccessTokenMode = (typeof ACCESS_TOKEN_MODES)[number];
+const configuredAccessTokenMode =
+	process.env.OAUTH_ACCESS_TOKEN_MODE ?? "short-lived";
+if (
+	!ACCESS_TOKEN_MODES.includes(configuredAccessTokenMode as AccessTokenMode)
+) {
+	throw new Error(
+		`Unsupported OAUTH_ACCESS_TOKEN_MODE: ${configuredAccessTokenMode}`,
+	);
+}
+const accessTokenMode = configuredAccessTokenMode as AccessTokenMode;
+const revocationCheckSecret =
+	accessTokenMode === "short-lived"
+		? undefined
+		: requiredEnv("OAUTH_REVOCATION_CHECK_SECRET");
+
+function issuerEndpoint(path: string): string {
+	const base = new URL(issuer);
+	return new URL(
+		`${base.pathname.replace(/\/$/, "")}/${path.replace(/^\/+/, "")}`,
+		base.origin,
+	).toString();
+}
+const revocationStatusUrl = issuerEndpoint("token-revocation-status");
+
 // Cookies are host-scoped, not port-scoped. Namespace each RP instance so
 // RP1 and RP2 never reuse each other's in-memory session IDs.
 const sessionCookieName = `rp_${port}_${clientId.slice(0, 8)}`;
@@ -97,6 +123,31 @@ function escapeHtml(value: unknown): string {
 		.replaceAll(">", "&gt;")
 		.replaceAll('"', "&quot;")
 		.replaceAll("'", "&#39;");
+}
+
+async function assertAuthoritativeStatus(
+	payload: Record<string, unknown>,
+): Promise<void> {
+	if (accessTokenMode === "short-lived") return;
+	if (!revocationCheckSecret) throw new Error("Revocation secret is missing");
+	const sid = typeof payload.sid === "string" ? payload.sid : undefined;
+	const sub = typeof payload.sub === "string" ? payload.sub : undefined;
+	if (!sid || !sub) throw new Error("Access token has no revocation identity");
+
+	const response = await fetch(revocationStatusUrl, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${revocationCheckSecret}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({ sid, sub }),
+	});
+	if (!response.ok) {
+		throw new Error(`Revocation status returned HTTP ${response.status}`);
+	}
+	const body = (await response.json()) as { active?: unknown };
+	if (body.active !== true)
+		throw new Error("Access token is no longer authorized");
 }
 
 function page(title: string, body: string): Response {
@@ -236,9 +287,14 @@ async function handleProtectedResource(request: Request): Promise<Response> {
 			verifyOptions: { issuer: verifiedIssuer, audience: discoveredAudience },
 			jwksUrl: verifiedJwksUrl,
 		});
+		await assertAuthoritativeStatus(payload);
+		const verificationMessage =
+			accessTokenMode === "short-lived"
+				? "verifyAccessToken accepted the JWT locally."
+				: `verifyAccessToken accepted the JWT plus ${accessTokenMode} revocation status.`;
 		return page(
 			"Protected resource",
-			`<p>verifyAccessToken accepted the JWT locally.</p><pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre><p><a href="/">Back</a></p>`,
+			`<p>${verificationMessage}</p><pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre><p><a href="/">Back</a></p>`,
 		);
 	} catch (error) {
 		return page(

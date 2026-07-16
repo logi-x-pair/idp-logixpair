@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 
 const email = process.env.TEST_RP_USER_EMAIL;
 const password = process.env.TEST_RP_USER_PASSWORD;
+const accessTokenMode = process.env.OAUTH_ACCESS_TOKEN_MODE ?? "short-lived";
+const accessTokenCheckMessage =
+	accessTokenMode === "short-lived"
+		? "verifyAccessToken accepted the JWT locally."
+		: `verifyAccessToken accepted the JWT plus ${accessTokenMode} revocation status.`;
 if (!email || !password) {
 	throw new Error(
 		"TEST_RP_USER_EMAIL and TEST_RP_USER_PASSWORD are required in apps/test-rp/.env",
@@ -28,9 +33,7 @@ test("RP1 login -> tokens -> RP2 silent SSO -> refresh -> coordinated logout", a
 	);
 
 	await page.getByRole("link", { name: "Protected resource" }).click();
-	await expect(
-		page.getByText("verifyAccessToken accepted the JWT locally."),
-	).toBeVisible();
+	await expect(page.getByText(accessTokenCheckMessage)).toBeVisible();
 	await page.goto("http://localhost:4101/refresh");
 	await expect(page).toHaveURL("http://localhost:4101/");
 	await expect(page.getByText("Signed in.", { exact: false })).toBeVisible();
