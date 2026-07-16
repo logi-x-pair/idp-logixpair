@@ -27,6 +27,9 @@ export default function Header() {
 					<Link href="/dashboard" className="text-sm hover:underline">
 						Dashboard
 					</Link>
+					<Link href="/account" className="text-sm hover:underline">
+						Account
+					</Link>
 				</nav>
 				<div className="flex items-center gap-2">
 					<ModeToggle />

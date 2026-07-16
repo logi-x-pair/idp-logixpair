@@ -30,4 +30,16 @@ export const clientSeeds: ClientSeed[] = [
 		skipConsent: true,
 		enableEndSession: true,
 	},
+	{
+		// Demonstrates the consent screen: NOT a trusted client, so users are
+		// asked to approve requested scopes on first authorization.
+		name: "Consent Demo App",
+		redirectUris: ["http://localhost:4003/callback"],
+		uri: "http://localhost:4003",
+		icon: "http://localhost:4003/icon.svg",
+		scope: "openid profile email offline_access",
+		type: "confidential",
+		skipConsent: false,
+		enableEndSession: false,
+	},
 ];
