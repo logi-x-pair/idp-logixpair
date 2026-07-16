@@ -9,14 +9,15 @@
  *   - refresh grants (refresh tokens revoked; introspection reports inactive)
  *   - opaque access tokens (rows deleted; introspection reports inactive)
  *
- * Residual exposure (JWTs cannot be un-issued): already-issued JWT access
- * tokens stay valid until their TTL (max 1h; shorter for scopes listed in
- * scopeExpirations) — BOTH for local JWKS verification AND for
- * /oauth2/introspect in this plugin version, which only drops the `sid`
- * claim when the backing session is gone. If a JWT must die sooner than its
- * TTL, the only lever is signing-key rotation (invalidates ALL outstanding
- * tokens — RUNBOOK.md incident procedure). See INTEGRATION.md for the
- * resource-server guidance.
+ * Residual exposure depends on the resource-server mode:
+ *   - short-lived/local verification: authorization-code JWTs remain usable
+ *     until their 10-minute TTL (machine tokens retain their 1-hour TTL).
+ *   - hybrid/immediate status-aware resources reject deleted-session user JWTs
+ *     at the next status check; raw JWKS verification and OAuth introspection
+ *     still report a JWT as valid until expiry in OAuth Provider 1.6.23.
+ * If an individual JWT must die sooner than its TTL, use a token denylist or
+ * signing-key rotation (which invalidates ALL outstanding tokens). See
+ * INTEGRATION.md and RUNBOOK.md.
  */
 import { db } from "@krazil-idp/db";
 import {
@@ -77,6 +78,6 @@ console.log(
 	}),
 );
 console.log(
-	"Done. Already-issued JWT access tokens remain valid until their TTL (max 1h); key rotation is the only earlier kill (RUNBOOK.md).",
+	"Done. Status-aware hybrid/immediate resources reject deleted-session user tokens; local-only JWT checks remain valid until TTL. Individual JWT revocation requires a denylist or key rotation.",
 );
 process.exit(0);

@@ -109,8 +109,13 @@ export function createAuth() {
 				silenceWarnings: { oauthAuthServerConfig: true },
 				// JWTs remain enabled in every runtime mode so existing client
 				// secrets, JWKS discovery, and ID-token validation stay compatible.
-				// Token lifetimes: plugin defaults, made explicit (token-config.ts).
-				accessTokenExpiresIn: TOKEN_LIFETIMES.accessTokenSeconds,
+				// Short-lived mode uses a 10-minute JWT; hybrid/immediate retain
+				// the one-hour default because live status checks provide the
+				// authorization boundary.
+				accessTokenExpiresIn:
+					env.OAUTH_ACCESS_TOKEN_MODE === "short-lived"
+						? TOKEN_LIFETIMES.shortLivedAccessTokenSeconds
+						: TOKEN_LIFETIMES.accessTokenSeconds,
 				m2mAccessTokenExpiresIn: TOKEN_LIFETIMES.m2mAccessTokenSeconds,
 				idTokenExpiresIn: TOKEN_LIFETIMES.idTokenSeconds,
 				refreshTokenExpiresIn: TOKEN_LIFETIMES.refreshTokenSeconds,

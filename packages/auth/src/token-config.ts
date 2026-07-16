@@ -5,6 +5,8 @@
 export const TOKEN_LIFETIMES = {
 	/** JWT/opaque access tokens from the authorization_code grant. */
 	accessTokenSeconds: 60 * 60, // 1h (plugin default)
+	/** Access-token TTL for the default short-lived authorization mode. */
+	shortLivedAccessTokenSeconds: 10 * 60, // 10m
 	/** Machine-to-machine access tokens (client_credentials grant). */
 	m2mAccessTokenSeconds: 60 * 60, // 1h (plugin default)
 	/** OIDC id_tokens. */

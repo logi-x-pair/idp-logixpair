@@ -2,7 +2,12 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { auth } from "@krazil-idp/auth";
 import { LOCKOUT } from "@krazil-idp/auth/token-config";
 import { db } from "@krazil-idp/db";
-import { session, user, verification } from "@krazil-idp/db/schema/auth";
+import {
+	oauthClient,
+	session,
+	user,
+	verification,
+} from "@krazil-idp/db/schema/auth";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
 import { eq } from "drizzle-orm";
 
@@ -163,6 +168,17 @@ describe("OAuth 2.1 provider contract", () => {
 			expect(wrongSecret.status).toBe(401);
 			const missingSecret = await status(userId, null);
 			expect(missingSecret.status).toBe(401);
+			const malformedIdentity = await auth.handler(
+				new Request(`${issuer}/token-revocation-status`, {
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${secret}`,
+						"content-type": "application/json",
+					},
+					body: JSON.stringify({ sid: created.id, azp: clientId }),
+				}),
+			);
+			expect(malformedIdentity.status).toBe(400);
 			const wrongSubject = await status(`wrong-${userId}`);
 			expect(wrongSubject.status).toBe(200);
 			expect((await wrongSubject.json()).active).toBe(false);
@@ -176,6 +192,42 @@ describe("OAuth 2.1 provider contract", () => {
 				expect((await revoked.json()).active).toBe(false);
 			} finally {
 				await db.delete(session).where(eq(session.id, created.id));
+			}
+		},
+	);
+
+	testRevocationStatus(
+		"machine-token status follows OAuth client disablement",
+		async () => {
+			const secret = process.env.OAUTH_REVOCATION_CHECK_SECRET;
+			if (!secret) throw new Error("Revocation test secret is missing");
+			const status = () =>
+				auth.handler(
+					new Request(`${issuer}/token-revocation-status`, {
+						method: "POST",
+						headers: {
+							Authorization: `Bearer ${secret}`,
+							"content-type": "application/json",
+						},
+						body: JSON.stringify({ azp: clientId }),
+					}),
+				);
+			const active = await status();
+			expect(active.status).toBe(200);
+			expect((await active.json()).active).toBe(true);
+			try {
+				await db
+					.update(oauthClient)
+					.set({ disabled: true })
+					.where(eq(oauthClient.clientId, clientId));
+				const disabled = await status();
+				expect(disabled.status).toBe(200);
+				expect((await disabled.json()).active).toBe(false);
+			} finally {
+				await db
+					.update(oauthClient)
+					.set({ disabled: false })
+					.where(eq(oauthClient.clientId, clientId));
 			}
 		},
 	);

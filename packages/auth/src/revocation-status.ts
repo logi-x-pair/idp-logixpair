@@ -2,10 +2,18 @@ import { createAuthEndpoint } from "better-auth/api";
 import { constantTimeEqual } from "better-auth/crypto";
 import { z } from "zod";
 
-const statusBody = z.object({
-	sid: z.string().min(1),
-	sub: z.string().min(1),
-});
+const statusBody = z
+	.object({
+		sid: z.string().min(1).optional(),
+		sub: z.string().min(1).optional(),
+		azp: z.string().min(1).optional(),
+	})
+	.refine(
+		(value) =>
+			(Boolean(value.sid) && Boolean(value.sub) && !value.azp) ||
+			(Boolean(value.azp) && !value.sid && !value.sub),
+		"Provide either sid+sub for a user token or azp for a machine token",
+	);
 
 export function revocationStatus(options: { secret: string }) {
 	return {
@@ -31,16 +39,25 @@ export function revocationStatus(options: { secret: string }) {
 						});
 					}
 
-					const { sid, sub } = ctx.body;
-					const session = (await ctx.context.adapter.findOne({
-						model: "session",
-						where: [
-							{ field: "id", value: sid },
-							{ field: "userId", value: sub },
-						],
-					})) as { expiresAt: Date | string } | null;
-					const active =
-						!!session && new Date(session.expiresAt).getTime() > Date.now();
+					const { sid, sub, azp } = ctx.body;
+					let active = false;
+					if (sid && sub) {
+						const session = (await ctx.context.adapter.findOne({
+							model: "session",
+							where: [
+								{ field: "id", value: sid },
+								{ field: "userId", value: sub },
+							],
+						})) as { expiresAt: Date | string } | null;
+						active =
+							!!session && new Date(session.expiresAt).getTime() > Date.now();
+					} else if (azp) {
+						const client = (await ctx.context.adapter.findOne({
+							model: "oauthClient",
+							where: [{ field: "clientId", value: azp }],
+						})) as { disabled?: boolean } | null;
+						active = !!client && client.disabled !== true;
+					}
 					return ctx.json({ active });
 				},
 			),
