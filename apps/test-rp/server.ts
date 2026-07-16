@@ -328,6 +328,19 @@ async function handleLogout(request: Request): Promise<Response> {
 	});
 }
 
+async function handleIdpLogoutOnly(request: Request): Promise<Response> {
+	const id = cookieValue(request, sessionCookieName);
+	const session = id ? sessions.get(id) : undefined;
+	if (!session) return Response.redirect(new URL("/", request.url).toString());
+	const url = buildEndSessionUrl(config, {
+		id_token_hint: session.idToken,
+		post_logout_redirect_uri: postLogoutRedirectUri,
+	});
+	// Deliberately preserve the RP cookie so the next /me request tests the
+	// resource server's token authorization policy after IdP termination.
+	return Response.redirect(url.toString());
+}
+
 async function handler(request: Request): Promise<Response> {
 	const { pathname } = new URL(request.url);
 	try {
@@ -337,6 +350,7 @@ async function handler(request: Request): Promise<Response> {
 		if (pathname === "/userinfo") return handleUserinfo(request);
 		if (pathname === "/refresh") return handleRefresh(request);
 		if (pathname === "/me") return handleProtectedResource(request);
+		if (pathname === "/logout-idp-only") return handleIdpLogoutOnly(request);
 		if (pathname === "/logout") return handleLogout(request);
 		if (pathname === "/logout-local") {
 			sessions.clear();

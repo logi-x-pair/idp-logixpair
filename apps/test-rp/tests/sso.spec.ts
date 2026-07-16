@@ -67,3 +67,29 @@ test("RP1 login -> tokens -> RP2 silent SSO -> refresh -> coordinated logout", a
 	await expect(page).toHaveURL(/localhost:3000\/sign-in/);
 	await expect(page.getByLabel("Password")).toBeVisible();
 });
+
+test("resource authorization follows mode after IdP session termination", async ({
+	page,
+}) => {
+	await page.goto("http://localhost:4101/");
+	await page.getByRole("link", { name: /Sign in with/ }).click();
+	await page.getByLabel("Email").fill(email as string);
+	await page.getByLabel("Password").fill(password as string);
+	await page.getByRole("button", { name: "Sign in" }).click();
+	await expect(page).toHaveURL("http://localhost:4101/");
+
+	await page.goto("http://localhost:4101/me");
+	await expect(page.getByText(accessTokenCheckMessage)).toBeVisible();
+	await page.goto("http://localhost:4101/logout-idp-only");
+	await expect(page).toHaveURL("http://localhost:4101/");
+	await expect(page.getByText("Signed in.", { exact: false })).toBeVisible();
+
+	await page.goto("http://localhost:4101/me");
+	if (accessTokenMode === "short-lived") {
+		await expect(page.getByText(accessTokenCheckMessage)).toBeVisible();
+		return;
+	}
+	await expect(
+		page.getByRole("heading", { name: "Protected resource rejected" }),
+	).toBeVisible();
+});
