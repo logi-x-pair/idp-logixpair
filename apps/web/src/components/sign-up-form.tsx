@@ -208,7 +208,7 @@ export default function SignUpForm() {
 				<button
 					type="button"
 					onClick={() => router.push(withCurrentQuery("/sign-in"))}
-					className="font-medium text-[var(--brand-primary)] underline-offset-4 hover:underline"
+					className="font-medium text-[var(--brand-accent)] underline-offset-4 hover:underline"
 				>
 					Sign in
 				</button>
