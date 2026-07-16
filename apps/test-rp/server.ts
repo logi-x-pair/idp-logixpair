@@ -133,7 +133,9 @@ async function assertAuthoritativeStatus(
 	const sid = typeof payload.sid === "string" ? payload.sid : undefined;
 	const sub = typeof payload.sub === "string" ? payload.sub : undefined;
 	const azp = typeof payload.azp === "string" ? payload.azp : undefined;
-	const identity = sid && sub ? { sid, sub } : azp ? { azp } : undefined;
+	const jti = typeof payload.jti === "string" ? payload.jti : undefined;
+	const identity =
+		sid && sub ? { sid, sub, jti } : azp ? { azp, jti } : undefined;
 	if (!identity) throw new Error("Access token has no revocation identity");
 
 	const response = await fetch(revocationStatusUrl, {
