@@ -12,12 +12,14 @@ export default function Header() {
 				<nav className="flex items-center gap-6">
 					<Link href="/" className="flex items-center gap-2">
 						{/* eslint-disable-next-line @next/next/no-img-element -- brand assets are deployment-local files */}
+						{/* biome-ignore lint/performance/noImgElement: deployment-local brand assets are not remote optimized content */}
 						<img
 							src={branding.logoLight}
 							alt={branding.brandName}
 							className="h-6 dark:hidden"
 						/>
 						{/* eslint-disable-next-line @next/next/no-img-element -- brand assets are deployment-local files */}
+						{/* biome-ignore lint/performance/noImgElement: deployment-local brand assets are not remote optimized content */}
 						<img
 							src={branding.logoDark}
 							alt={branding.brandName}

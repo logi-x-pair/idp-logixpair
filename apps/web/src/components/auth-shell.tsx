@@ -9,12 +9,14 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
 	return (
 		<main className="flex min-h-svh flex-col items-center justify-center bg-[var(--brand-bg)] px-4 py-10 dark:bg-background">
 			{/* eslint-disable-next-line @next/next/no-img-element -- brand assets are deployment-local files */}
+			{/* biome-ignore lint/performance/noImgElement: deployment-local brand assets are not remote optimized content */}
 			<img
 				src={branding.logoLight}
 				alt={branding.brandName}
 				className="mb-8 h-10 dark:hidden"
 			/>
 			{/* eslint-disable-next-line @next/next/no-img-element -- brand assets are deployment-local files */}
+			{/* biome-ignore lint/performance/noImgElement: deployment-local brand assets are not remote optimized content */}
 			<img
 				src={branding.logoDark}
 				alt={branding.brandName}

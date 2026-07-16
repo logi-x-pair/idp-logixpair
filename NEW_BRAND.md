@@ -1,0 +1,114 @@
+# New brand deployment
+
+This repository is a white-label IdP template. A deployment's visual identity is fixed at deploy time; it never changes based on the requesting client application.
+
+## 1. Create the deployment
+
+Use GitHub's **Use this template** or clone the repository:
+
+```bash
+git clone <template-url> <brand-idp>
+cd <brand-idp>
+bun install
+```
+
+The only source files that should change for brand identity are under `branding/`, plus deployment `.env` files.
+
+## 2. Replace the brand
+
+Edit `branding/config.ts`:
+
+- `brandName`
+- `logoLight`, `logoDark`, and `favicon` paths
+- `primaryColor`, `backgroundColor`, `accentColor`
+- `fontFamily`
+- `supportUrl`, `termsUrl`, `privacyUrl`
+
+Replace the corresponding files in `branding/assets/`. Do not put a logo, favicon, wordmark, or brand name in `apps/web/public`, `apps/web/src/app/favicon.ico`, shared UI, or email code. The asset route serves `/brand/*` from this folder.
+
+Run a placeholder-brand check before committing:
+
+```bash
+grep -R "<old-placeholder>" . --exclude-dir=node_modules --exclude-dir=.next
+```
+
+Only `branding/` should contain deployment-specific brand values.
+
+## 3. Configure deployment secrets
+
+Copy the examples to untracked files:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+cp packages/db/.env.example packages/db/.env
+```
+
+Set, at minimum:
+
+- `POSTGRES_PASSWORD` in `packages/db/.env`.
+- `DATABASE_URL` for the deployment database.
+- `BETTER_AUTH_SECRET` generated with `openssl rand -base64 32`.
+- `BETTER_AUTH_URL` to the public issuer origin.
+- `CORS_ORIGIN` to the same fullstack origin.
+- Token prefixes before the first production deployment.
+- `OAUTH_ADMIN_EMAILS`, `IDP_ADMIN_EMAIL`, and `IDP_ADMIN_PASSWORD` for the operator bootstrap.
+- `MAILER_WEBHOOK_URL` and optional `MAILER_WEBHOOK_TOKEN` for transactional email delivery.
+
+Never commit either `.env` file. Use a secret manager in production.
+
+## 4. Register this brand's apps
+
+Edit only `branding/clients.ts` for first-party clients. Replace the demo app names and exact callback/post-logout URLs with this brand's apps. Use:
+
+```bash
+bun run db:start
+bun run db:push
+bun --cwd apps/web run seed:admin
+bun --cwd apps/web run seed:clients
+```
+
+The operator must be explicitly provisioned by `seed:admin`; public signup cannot assign the `admin` role. `seed:clients` is idempotent by client name. Capture each `client_secret` once and store it in the relying party's secret manager. Do not put it in this repository.
+
+Use `skipConsent: true` only for first-party trusted clients. Keep `enableEndSession: true` and exact `postLogoutRedirectUris` for clients that support RP-initiated logout. Public clients must use `token_endpoint_auth_method: "none"`; PKCE remains required.
+
+## 5. Deploy
+
+```bash
+bun install
+bun run db:migrate
+bun run build
+bun --cwd apps/web run start
+```
+
+Set the platform's HTTPS hostname as `BETTER_AUTH_URL`. Verify:
+
+```bash
+curl -fsS "$BETTER_AUTH_URL/api/health"
+curl -fsS "$BETTER_AUTH_URL/api/auth/.well-known/openid-configuration"
+curl -fsS "$BETTER_AUTH_URL/api/auth/jwks"
+```
+
+The discovery document's `issuer` must exactly equal the configured issuer. Register that discovery URL with every relying party; do not hardcode token or authorization endpoints in app code.
+
+## 6. Pull upstream fixes later
+
+A brand fork can merge upstream template fixes without editing upstream source files:
+
+```bash
+git remote add upstream <template-repository-url>
+git fetch upstream
+git merge upstream/main
+```
+
+Constraint 9 is what keeps this merge path low-conflict: all brand-specific values and assets live in `branding/`, while application behavior remains brand-agnostic. Resolve only intentional changes in `branding/` and deployment environment files.
+
+## 7. Handoff checklist
+
+- [ ] `branding/config.ts` contains this deployment's values.
+- [ ] `branding/assets/` contains the correct light logo, dark logo, and favicon.
+- [ ] No old placeholder name remains outside `branding/`.
+- [ ] Production HTTPS issuer and database are configured.
+- [ ] `BETTER_AUTH_SECRET` and token prefixes are set and stored securely.
+- [ ] Operator is provisioned and client seed output is stored securely.
+- [ ] Discovery, JWKS, health, login, callback, logout, and a relying-party smoke test pass.
+- [ ] `MAILER_WEBHOOK_URL` (and optional token) is configured; the production mailer fails closed when absent.

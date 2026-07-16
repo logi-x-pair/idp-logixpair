@@ -90,6 +90,7 @@ export default function ConsentForm() {
 			<div className="flex items-center gap-3">
 				{client.logo_uri && (
 					// eslint-disable-next-line @next/next/no-img-element -- client icons are remote URLs
+					// biome-ignore lint/performance/noImgElement: client-provided remote icons are not static app assets
 					<img
 						src={client.logo_uri}
 						alt=""
