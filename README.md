@@ -147,6 +147,30 @@ first. See `INTEGRATION.md` for the flow and `RUNBOOK.md` for operations.
 
 Token lifetimes are explicit in `packages/auth/src/token-config.ts` and retain plugin defaults: access 1 hour, machine-to-machine 1 hour, ID token 10 hours, refresh 30 days, authorization code 10 minutes. High-privilege scopes belong in `SCOPE_EXPIRATIONS` with a shorter 5–15 minute value.
 
+Access-token authorization modes are selected with `OAUTH_ACCESS_TOKEN_MODE`:
+
+- `short-lived` (default): local JWKS verification; use short
+  `scopeExpirations` values when a smaller stolen-token window is required.
+- `hybrid`: local verification for normal traffic and a live session/user
+  authorization check on high-risk resource routes.
+- `immediate`: the same authoritative session/user check on every protected
+  resource route. This immediately honors user/session termination, but it is
+  not token-specific JWT revocation; `/oauth2/revoke` cannot un-issue an
+  individual JWT in OAuth Provider 1.6.23.
+
+If token-specific immediate revocation is required, use opaque access tokens
+with database introspection in a fresh deployment or add a separately designed
+`jti`/token-hash denylist. Do not switch existing hashed-client deployments to
+`disableJwtPlugin` at runtime.
+
+The private status check validates the verified token's `sid` and `sub` against
+live Better Auth session state. It is authoritative for user/session
+termination, not for an individual JWT's `/oauth2/revoke` status. It is not
+OAuth introspection: OAuth Provider 1.6.23 can report a deleted-session JWT as
+`active`. If a deployment instead needs database-backed opaque tokens, treat
+`disableJwtPlugin` as a deliberate fresh-deployment migration, not a runtime
+switch for existing clients.
+
 OAuth endpoint limits are per-IP and reset after the window:
 
 | Endpoint | Window | Max |

@@ -107,7 +107,19 @@ const payload = await resourceClient.verifyAccessToken(accessToken, {
 });
 ```
 
-For high-stakes operations, use `/oauth2/introspect` with a confidential client. Important limitation: in OAuth Provider 1.6.23, deleting the backing session does not make an already-issued JWT introspection response inactive; it remains active until JWT expiry. Opaque access tokens and refresh tokens do become inactive immediately. Use short lifetimes for sensitive scopes and follow `RUNBOOK.md` for signing-key compromise.
+For `hybrid` mode, call the private `token-revocation-status` endpoint after
+local verification on high-risk routes. Send the verified JWT's `sid` and `sub`
+with `OAUTH_REVOCATION_CHECK_SECRET`; the IdP checks that the matching session
+still exists and has not expired. In `immediate` mode, make this check on every
+protected resource request. Fail closed if the status service is unavailable.
+This is session/user termination, not token-specific JWT revocation; the
+provider cannot invalidate an individual JWT through `/oauth2/revoke`.
+
+Do not use `/oauth2/introspect` as a stale-JWT revocation check with OAuth
+Provider 1.6.23: deleting the backing session still leaves a JWT response
+`active: true` until expiry. Introspection does immediately reflect deleted
+opaque access-token rows and revoked refresh-token rows. Use short lifetimes for
+sensitive scopes and follow `RUNBOOK.md` for signing-key compromise.
 
 ## Logout
 
