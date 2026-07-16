@@ -9,6 +9,7 @@ import { jwt } from "better-auth/plugins";
 
 import { mailer, resetPasswordEmail, verificationEmail } from "./email";
 import { auditHook, lockoutGuard } from "./guards";
+import { revocationStatus } from "./revocation-status";
 import { SCOPE_EXPIRATIONS, TOKEN_LIFETIMES } from "./token-config";
 
 /** Emails allowed to manage OAuth clients (create/read/update/delete/rotate). */
@@ -30,8 +31,19 @@ const trustedClientIds = (env.OAUTH_TRUSTED_CLIENT_IDS ?? "")
 	.map((id) => id.trim())
 	.filter((id) => id.length > 0);
 
+function revocationStatusSecret(): string | undefined {
+	if (env.OAUTH_ACCESS_TOKEN_MODE === "short-lived") return undefined;
+	if (!env.OAUTH_REVOCATION_CHECK_SECRET) {
+		throw new Error(
+			"OAUTH_REVOCATION_CHECK_SECRET is required when OAUTH_ACCESS_TOKEN_MODE is hybrid or immediate",
+		);
+	}
+	return env.OAUTH_REVOCATION_CHECK_SECRET;
+}
+
 export function createAuth() {
 	const db = createDb();
+	const revocationSecret = revocationStatusSecret();
 
 	return betterAuth({
 		database: drizzleAdapter(db, {
@@ -83,6 +95,9 @@ export function createAuth() {
 			after: auditHook,
 		},
 		plugins: [
+			...(revocationSecret
+				? [revocationStatus({ secret: revocationSecret })]
+				: []),
 			jwt(),
 			oauthProvider({
 				loginPage: "/sign-in",
@@ -92,6 +107,8 @@ export function createAuth() {
 				},
 				scopes: ["openid", "profile", "email", "offline_access"],
 				silenceWarnings: { oauthAuthServerConfig: true },
+				// JWTs remain enabled in every runtime mode so existing client
+				// secrets, JWKS discovery, and ID-token validation stay compatible.
 				// Token lifetimes: plugin defaults, made explicit (token-config.ts).
 				accessTokenExpiresIn: TOKEN_LIFETIMES.accessTokenSeconds,
 				m2mAccessTokenExpiresIn: TOKEN_LIFETIMES.m2mAccessTokenSeconds,

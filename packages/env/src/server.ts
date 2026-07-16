@@ -11,6 +11,12 @@ export const env = createEnv({
 		NODE_ENV: z
 			.enum(["development", "production", "test"])
 			.default("development"),
+		/** Access-token authorization policy; see README and INTEGRATION.md. */
+		OAUTH_ACCESS_TOKEN_MODE: z
+			.enum(["short-lived", "hybrid", "immediate"])
+			.default("short-lived"),
+		/** Server-to-server secret required by hybrid revocation checks. */
+		OAUTH_REVOCATION_CHECK_SECRET: z.string().min(32).optional(),
 		/** Comma-separated audiences (resource servers) for JWT access tokens. */
 		OAUTH_VALID_AUDIENCES: z.string().optional(),
 		/** Token prefixes for secret scanners. Immutable after first production deploy. */

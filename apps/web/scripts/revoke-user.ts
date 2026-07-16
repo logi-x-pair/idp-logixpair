@@ -43,19 +43,26 @@ if (users.length === 0) {
 }
 const userId = users[0].id;
 
-const revokedRefresh = await db
-	.update(oauthRefreshToken)
-	.set({ revoked: new Date() })
-	.where(eq(oauthRefreshToken.userId, userId))
-	.returning({ id: oauthRefreshToken.id });
-const deletedAccess = await db
-	.delete(oauthAccessToken)
-	.where(eq(oauthAccessToken.userId, userId))
-	.returning({ id: oauthAccessToken.id });
-const deletedSessions = await db
-	.delete(session)
-	.where(eq(session.userId, userId))
-	.returning({ id: session.id });
+const revocation = await db.transaction(async (tx) => {
+	const revokedRefresh = await tx
+		.update(oauthRefreshToken)
+		.set({ revoked: new Date() })
+		.where(eq(oauthRefreshToken.userId, userId))
+		.returning({ id: oauthRefreshToken.id });
+	const deletedAccess = await tx
+		.delete(oauthAccessToken)
+		.where(eq(oauthAccessToken.userId, userId))
+		.returning({ id: oauthAccessToken.id });
+	const deletedSessions = await tx
+		.delete(session)
+		.where(eq(session.userId, userId))
+		.returning({ id: session.id });
+	return {
+		refreshTokensRevoked: revokedRefresh.length,
+		opaqueAccessTokensDeleted: deletedAccess.length,
+		sessionsDeleted: deletedSessions.length,
+	};
+});
 
 console.log(
 	JSON.stringify({
@@ -64,9 +71,9 @@ console.log(
 		at: new Date().toISOString(),
 		userId,
 		email,
-		refreshTokensRevoked: revokedRefresh.length,
-		opaqueAccessTokensDeleted: deletedAccess.length,
-		sessionsDeleted: deletedSessions.length,
+		refreshTokensRevoked: revocation.refreshTokensRevoked,
+		opaqueAccessTokensDeleted: revocation.opaqueAccessTokensDeleted,
+		sessionsDeleted: revocation.sessionsDeleted,
 	}),
 );
 console.log(

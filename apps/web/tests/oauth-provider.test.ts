@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { auth } from "@krazil-idp/auth";
 import { LOCKOUT } from "@krazil-idp/auth/token-config";
 import { db } from "@krazil-idp/db";
-import { user, verification } from "@krazil-idp/db/schema/auth";
+import { session, user, verification } from "@krazil-idp/db/schema/auth";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
 import { eq } from "drizzle-orm";
 
@@ -13,6 +13,10 @@ const callback = "http://localhost:4001/callback";
 
 let adminHeaders: Headers;
 let clientId: string;
+
+const accessTokenMode = process.env.OAUTH_ACCESS_TOKEN_MODE ?? "short-lived";
+const testRevocationStatus =
+	accessTokenMode === "short-lived" ? test.skip : test;
 let clientSecret: string;
 let userId: string;
 
@@ -123,6 +127,59 @@ beforeAll(async () => {
 });
 
 describe("OAuth 2.1 provider contract", () => {
+	testRevocationStatus(
+		"authoritative status rejects a terminated session",
+		async () => {
+			const existing = await db
+				.select({ id: session.id })
+				.from(session)
+				.where(eq(session.userId, userId));
+			await auth.api.signInEmail({
+				body: { email: adminEmail, password: adminPassword },
+			});
+			const sessions = await db
+				.select({ id: session.id })
+				.from(session)
+				.where(eq(session.userId, userId));
+			const created = sessions.find(
+				(candidate) =>
+					!existing.some((previous) => previous.id === candidate.id),
+			);
+			if (!created) throw new Error("Test sign-in did not create a session");
+			const secret = process.env.OAUTH_REVOCATION_CHECK_SECRET;
+			if (!secret) throw new Error("Revocation test secret is missing");
+			const status = (statusSub = userId, bearer: string | null = secret) =>
+				auth.handler(
+					new Request(`${issuer}/token-revocation-status`, {
+						method: "POST",
+						headers: {
+							...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+							"content-type": "application/json",
+						},
+						body: JSON.stringify({ sid: created.id, sub: statusSub }),
+					}),
+				);
+			const wrongSecret = await status(userId, `${secret}-wrong`);
+			expect(wrongSecret.status).toBe(401);
+			const missingSecret = await status(userId, null);
+			expect(missingSecret.status).toBe(401);
+			const wrongSubject = await status(`wrong-${userId}`);
+			expect(wrongSubject.status).toBe(200);
+			expect((await wrongSubject.json()).active).toBe(false);
+			try {
+				const active = await status();
+				expect(active.status).toBe(200);
+				expect((await active.json()).active).toBe(true);
+				await db.delete(session).where(eq(session.id, created.id));
+				const revoked = await status();
+				expect(revoked.status).toBe(200);
+				expect((await revoked.json()).active).toBe(false);
+			} finally {
+				await db.delete(session).where(eq(session.id, created.id));
+			}
+		},
+	);
+
 	test("unknown-email failures do not create lockout rows", async () => {
 		const email = `missing-${Date.now()}@example.com`;
 		const response = await auth.handler(
