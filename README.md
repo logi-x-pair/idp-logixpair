@@ -77,6 +77,7 @@ bun --cwd apps/web run clients rotate <client_id>
 bun --cwd apps/web run clients disable <client_id>
 bun --cwd apps/web run clients enable <client_id>
 bun --cwd apps/web run revoke-user <email>
+bun --cwd apps/web run revoke-token <jwt_access_token>
 ```
 
 `seed:admin` is deliberate and proves password ownership before assigning the server-only `admin` role. Public signup cannot set that role. `seed:clients` is idempotent by client name and prints a new client secret only at creation/rotation; store it immediately.
@@ -156,31 +157,40 @@ Access-token authorization modes are selected with `OAUTH_ACCESS_TOKEN_MODE`:
 
 - `short-lived` (default): local JWKS verification with a 10-minute
   authorization-code access-token TTL. Machine tokens retain their one-hour
-  configured TTL.
+  configured TTL. A raw local verifier does not query the denylist, so a
+  denylisted JWT remains usable there until expiry.
 - `hybrid`: local verification for normal traffic and a live session/user
-  authorization check on high-risk resource routes.
+  authorization check on high-risk resource routes. Those routes can reject a
+  denylisted JWT when the resource server forwards its verified `jti`.
 - `immediate`: the same authoritative session/user check on every protected
-  resource route. This immediately honors user/session termination, but it is
-  not token-specific JWT revocation; `/oauth2/revoke` cannot un-issue an
-  individual JWT in OAuth Provider 1.6.23.
+  resource route, plus the same `jti` denylist check.
 
-If token-specific immediate revocation is required, use opaque access tokens
-with database introspection in a fresh deployment or add a separately designed
-`jti`/token-hash denylist. Do not switch existing hashed-client deployments to
-`disableJwtPlugin` at runtime.
+JWT-specific revocation is implemented without changing the OAuth Provider
+response contract. For a valid JWT access token, `/oauth2/revoke` verifies the
+signature, issuer, audience, and authenticated client's ownership of `azp`,
+then stores the signed `jti` until expiry. Invalid, expired, or foreign JWTs
+are not inserted. Database write failures are surfaced rather than reported as
+successful revocations.
 
-The private status check validates the verified token's `sid` and `sub` against
-live Better Auth session state. It is authoritative for user/session
-termination, not for an individual JWT's `/oauth2/revoke` status. It is not
-OAuth introspection: OAuth Provider 1.6.23 can report a deleted-session JWT as
-`active`. If a deployment instead needs database-backed opaque tokens, treat
-`disableJwtPlugin` as a deliberate fresh-deployment migration, not a runtime
-switch for existing clients.
+The denylist is enforced by `/oauth2/introspect` and the private
+`/token-revocation-status` endpoint. Resource servers must send the verified
+JWT's `jti` in addition to `sid`/`sub` for user tokens or `azp` for machine
+tokens. Raw JWKS verification cannot see this database state. The operator CLI
+accepts one verified JWT and performs the same denylist insert:
+
+```bash
+bun --cwd apps/web run revoke-token <jwt_access_token>
+```
+
+The CLI is for a known single token and never prints the token. Use
+`revoke-user` for the user-wide session, refresh-token, and opaque-token kill
+switch; it does not enumerate already-issued JWTs. Signing-key rotation remains
+the emergency operation for invalidating every outstanding JWT.
 
 Machine-to-machine JWTs have no `sid`/`sub`; hybrid and immediate checks use
 their verified `azp` to require a live, enabled OAuth client. Disabling that
-client rejects all of its machine tokens at the next status check. Selecting one
-individual machine JWT still requires an opaque token or `jti` denylist.
+client rejects all of its machine tokens at the next status check. Selecting
+one individual machine JWT uses the signed `jti` denylist path above.
 
 OAuth endpoint limits are per-IP and reset after the window:
 
@@ -195,4 +205,4 @@ OAuth endpoint limits are per-IP and reset after the window:
 
 CSRF posture: Better Auth validates origins on state-changing requests, and the browser client sends same-origin, secure/httpOnly/same-site cookies in production. OAuth clients must generate and verify `state`; the provider verifies signed `oauth_query` and PKCE S256.
 - The production mailer uses the provider-neutral `MAILER_WEBHOOK_URL`/`MAILER_WEBHOOK_TOKEN` environment variables and fails closed when the URL is absent; it never prints token URLs in production.
-- Local JWT verification is fast but cannot revoke already-issued JWTs. The kill switch performs three distinct operations: deleting sessions blocks new browser authorization; explicitly marking refresh-token rows `revoked` blocks refresh grants; deleting opaque access-token rows makes those tokens inactive. Session deletion or OIDC end-session alone does **not** revoke refresh tokens in plugin 1.6.23. JWT introspection can remain `active` until JWT expiry even after its backing session is deleted; use short scope expirations or signing-key rotation for emergency JWT invalidation.
+- Local JWT verification is fast but cannot consult the database denylist. `revoke-token` invalidates one known JWT for introspection and status-aware resource servers; signing-key rotation remains the global emergency fallback. Session deletion or OIDC end-session alone does **not** revoke refresh tokens in plugin 1.6.23.

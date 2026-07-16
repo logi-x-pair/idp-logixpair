@@ -52,18 +52,39 @@ This immediately:
 
 Revocation behavior depends on the configured resource-server mode:
 
-- `short-lived`: authorization-code JWTs remain usable by local verification
-  until their 10-minute TTL; machine tokens retain their one-hour TTL.
-- `hybrid`: high-risk routes reject deleted-session user JWTs at the next
-  status check; normal local-only routes retain the JWT TTL behavior.
-- `immediate`: every status-aware protected route rejects deleted-session user
-  JWTs at the next check.
+- `short-lived`: authorization-code JWTs remain usable by raw local JWKS
+  verification until their 10-minute TTL; machine tokens retain their
+  one-hour TTL. Introspection sees a denylisted JWT as inactive, but raw local
+  verification does not consult the database.
+- `hybrid`: high-risk routes reject a denylisted JWT when the resource server
+  forwards its verified `jti` to the status endpoint; normal local-only routes
+  retain the JWT TTL behavior. Session termination is also enforced by the
+  status check.
+- `immediate`: every status-aware protected route rejects a denylisted JWT on
+  its next check, as well as rejecting deleted-session user tokens and disabled
+  machine clients.
 
-Raw JWKS verification and OAuth Provider 1.6.23 `/oauth2/introspect` still
-report deleted-session JWTs as active until expiry. Machine-to-machine status
-checks use `azp` and the OAuth client enabled state. Individual JWT revocation
-still requires an opaque token or a `jti`/token-hash denylist; key rotation is
-the global emergency fallback.
+`revoke-user` does not enumerate already-issued JWTs, so use the single-token
+operation below when the JWT itself is known. Signing-key rotation remains the
+global emergency fallback.
+
+## Revoke one known JWT access token
+
+```bash
+bun --cwd apps/web run revoke-token <jwt_access_token>
+```
+
+The CLI verifies the JWT signature, issuer, configured audience, expiration,
+`jti`, and OAuth client `azp` before inserting one row into `revoked_token`.
+The row is retained only until the token expires; repeated revocation is
+idempotent. The plaintext token is never printed. A failed verification or
+database write is an error and does not claim success.
+
+The authenticated `/oauth2/revoke` endpoint applies the same signed-claim and
+`azp` ownership checks for a client-requested JWT revocation. Both paths affect
+OAuth introspection and the private `token-revocation-status` endpoint. Resource
+servers must forward `jti` with `sid`/`sub` or `azp`; raw JWKS-only verification
+cannot observe the denylist.
 
 ## Leaked signing key: nuclear rotation
 

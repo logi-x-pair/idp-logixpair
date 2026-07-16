@@ -1,5 +1,5 @@
 /**
- * Incident kill-switch: revokes ALL of a user's refresh tokens, opaque access
+ * Incident kill-switch: revokes all of a user's refresh tokens, opaque access
  * tokens, and sessions — cutting off new token issuance instantly.
  *
  *   bun run revoke-user <email>
@@ -9,15 +9,11 @@
  *   - refresh grants (refresh tokens revoked; introspection reports inactive)
  *   - opaque access tokens (rows deleted; introspection reports inactive)
  *
- * Residual exposure depends on the resource-server mode:
- *   - short-lived/local verification: authorization-code JWTs remain usable
- *     until their 10-minute TTL (machine tokens retain their 1-hour TTL).
- *   - hybrid/immediate status-aware resources reject deleted-session user JWTs
- *     at the next status check; raw JWKS verification and OAuth introspection
- *     still report a JWT as valid until expiry in OAuth Provider 1.6.23.
- * If an individual JWT must die sooner than its TTL, use a token denylist or
- * signing-key rotation (which invalidates ALL outstanding tokens). See
- * INTEGRATION.md and RUNBOOK.md.
+ * This command does not enumerate already-issued JWTs. For one known JWT, use
+ * `bun run revoke-token <jwt_access_token>`; that verified `jti` is enforced by
+ * introspection and the private status endpoint. Raw local JWKS verification
+ * remains valid until the JWT expires. Signing-key rotation invalidates every
+ * outstanding JWT and is the emergency global fallback.
  */
 import { db } from "@krazil-idp/db";
 import {
@@ -78,6 +74,6 @@ console.log(
 	}),
 );
 console.log(
-	"Done. Status-aware hybrid/immediate resources reject deleted-session user tokens; local-only JWT checks remain valid until TTL. Individual JWT revocation requires a denylist or key rotation.",
+	"Done. Status-aware hybrid/immediate resources reject deleted-session user tokens; use revoke-token for a known JWT and jti-specific status/introspection revocation.",
 );
 process.exit(0);

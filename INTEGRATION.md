@@ -109,18 +109,25 @@ const payload = await resourceClient.verifyAccessToken(accessToken, {
 
 For `hybrid` mode, call the private `token-revocation-status` endpoint after
 local verification on high-risk routes. For user tokens, send the verified
-JWT's `sid` and `sub`; for machine-to-machine tokens, send its `azp`. The IdP
-requires a live session owned by that user or an enabled OAuth client,
+JWT's `sid`, `sub`, and `jti`; for machine-to-machine tokens, send its `azp`
+and `jti`. The `jti` is required for token-specific denylist enforcement. The
+IdP also requires a live session owned by that user or an enabled OAuth client,
 respectively. In `immediate` mode, make this check on every protected resource
 request. Fail closed if the status service is unavailable.
-This is session/user termination, not token-specific JWT revocation; the
-provider cannot invalidate an individual JWT through `/oauth2/revoke`.
 
-Do not use `/oauth2/introspect` as a stale-JWT revocation check with OAuth
-Provider 1.6.23: deleting the backing session still leaves a JWT response
-`active: true` until expiry. Introspection does immediately reflect deleted
-opaque access-token rows and revoked refresh-token rows. Use short lifetimes for
-sensitive scopes and follow `RUNBOOK.md` for signing-key compromise.
+The authenticated `/oauth2/revoke` endpoint and
+`bun --cwd apps/web run revoke-token <jwt_access_token>` verify the JWT
+signature, issuer, audience, expiry, and `azp` ownership before storing its
+signed `jti`. The denylist is checked by OAuth introspection and
+`token-revocation-status`; raw JWKS verification cannot observe database
+revocations. `revoke-user` remains the user-wide session, refresh-token, and
+opaque-token kill switch but does not enumerate already-issued JWTs.
+
+Do not use `/oauth2/introspect` as a substitute for local signature
+verification. It is the right place to enforce a denylisted JWT because it now
+returns `active: false` when the verified response includes a denylisted `jti`.
+Use short lifetimes for sensitive scopes and follow `RUNBOOK.md` for
+signing-key compromise.
 
 ## Logout
 
