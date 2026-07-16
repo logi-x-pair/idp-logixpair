@@ -132,7 +132,9 @@ async function assertAuthoritativeStatus(
 	if (!revocationCheckSecret) throw new Error("Revocation secret is missing");
 	const sid = typeof payload.sid === "string" ? payload.sid : undefined;
 	const sub = typeof payload.sub === "string" ? payload.sub : undefined;
-	if (!sid || !sub) throw new Error("Access token has no revocation identity");
+	const azp = typeof payload.azp === "string" ? payload.azp : undefined;
+	const identity = sid && sub ? { sid, sub } : azp ? { azp } : undefined;
+	if (!identity) throw new Error("Access token has no revocation identity");
 
 	const response = await fetch(revocationStatusUrl, {
 		method: "POST",
@@ -140,7 +142,7 @@ async function assertAuthoritativeStatus(
 			Authorization: `Bearer ${revocationCheckSecret}`,
 			"Content-Type": "application/json",
 		},
-		body: JSON.stringify({ sid, sub }),
+		body: JSON.stringify(identity),
 	});
 	if (!response.ok) {
 		throw new Error(`Revocation status returned HTTP ${response.status}`);
