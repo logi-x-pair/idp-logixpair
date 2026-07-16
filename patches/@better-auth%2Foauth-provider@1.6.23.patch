@@ -1,0 +1,22 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 847085c481843ce6852a5db9006a2e79b7f77b15..55db0a89e2a69636da709afffecca6a151aa8aa6 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -2282,8 +2282,15 @@ async function revokeJwtAccessToken(ctx, opts, token) {
+ 				error_description: "invalid JWT signature",
+ 				error: "invalid_request"
+ 			});
+-			else if (error.name === "JWTExpired") return null;
+-			else if (error.name === "JWTInvalid") return null;
++			else if (
++				error.name === "JWTExpired" ||
++				error.name === "JWTInvalid" ||
++				error.name === "JWTClaimValidationFailed" ||
++				error.name === "JWSSignatureVerificationFailed" ||
++				error.name === "JWKSNoMatchingKey" ||
++				error.name === "JOSEAlgNotAllowed" ||
++				error.name === "JOSENotSupported"
++			) return null;
+ 			throw error;
+ 		}
+ 		throw new Error(error);

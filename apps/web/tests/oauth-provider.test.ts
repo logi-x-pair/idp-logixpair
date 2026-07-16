@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { auth } from "@krazil-idp/auth";
-import { verifyRevocableAccessToken } from "@krazil-idp/auth/jwt-revocation";
 import { LOCKOUT } from "@krazil-idp/auth/token-config";
 import { db } from "@krazil-idp/db";
 import {
@@ -450,34 +449,36 @@ describe("OAuth 2.1 provider contract", () => {
 		expect(afterForeign.status).toBe(200);
 		expect((await afterForeign.json()).active).toBe(true);
 		expect(await revokedRows(jti)).toHaveLength(0);
+	});
 
-		const forgedJti = crypto.randomUUID();
-		const forgedHeader = Buffer.from(
-			JSON.stringify({ alg: "EdDSA", typ: "JWT" }),
-		).toString("base64url");
-		const forgedPayload = Buffer.from(
-			JSON.stringify({
-				iss: issuer,
-				aud: issuer,
-				azp: clientId,
-				jti: forgedJti,
-				exp: Math.floor(Date.now() / 1000) + 600,
-			}),
-		).toString("base64url");
-		const forgedToken = `${forgedHeader}.${forgedPayload}.AA`;
-		let forgedRejected = false;
-		try {
-			await verifyRevocableAccessToken({
-				token: forgedToken,
-				issuer,
-				audience: issuer,
-				expectedClientId: clientId,
-			});
-		} catch {
-			forgedRejected = true;
+	test("wrong-signature JWT revocation preserves RFC client authentication", async () => {
+		const { accessToken, claims } = await issueJwt(
+			"jwt-wrong-signature",
+			"l".repeat(43),
+		);
+		const [encodedHeader, encodedPayload] = accessToken.split(".");
+		if (!encodedHeader || !encodedPayload) {
+			throw new Error("Access token is not a JWT");
 		}
-		expect(forgedRejected).toBe(true);
-		expect(await revokedRows(forgedJti)).toHaveLength(0);
+		const wrongSignature = Buffer.alloc(64, 0x5a).toString("base64url");
+		const forgedToken = `${encodedHeader}.${encodedPayload}.${wrongSignature}`;
+		const unauthenticated = await revokeAccessToken(
+			clientId,
+			`${clientSecret}-wrong`,
+			forgedToken,
+		);
+		expect(unauthenticated.status).toBe(401);
+
+		const revoked = await revokeAccessToken(
+			clientId,
+			clientSecret,
+			forgedToken,
+		);
+		expect(revoked.status).toBe(200);
+		expect(await revokedRows(claims.jti as string)).toHaveLength(0);
+		const originalToken = await introspectAccessToken(accessToken);
+		expect(originalToken.status).toBe(200);
+		expect((await originalToken.json()).active).toBe(true);
 	});
 
 	test("owned JWT revocation disables introspection and status", async () => {

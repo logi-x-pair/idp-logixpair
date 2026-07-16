@@ -152,6 +152,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@better-auth/oauth-provider@1.6.23": "patches/@better-auth%2Foauth-provider@1.6.23.patch",
+  },
   "catalog": {
     "@tailwindcss/postcss": "^4.3.2",
     "@types/react": "^19.2.17",

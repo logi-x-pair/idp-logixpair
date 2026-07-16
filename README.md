@@ -172,6 +172,11 @@ then stores the signed `jti` until expiry. Invalid, expired, or foreign JWTs
 are not inserted. Database write failures are surfaced rather than reported as
 successful revocations.
 
+The repository pins a Bun patch for OAuth Provider `1.6.23` so JOSE token
+validation failures reach RFC 7009's authenticated-client no-op response instead
+of becoming HTTP 500. Remove that patch only after an upstream upgrade passes the
+wrong-signature and failed-client-auth protocol tests.
+
 The denylist is enforced by `/oauth2/introspect` and the private
 `/token-revocation-status` endpoint. Resource servers must send the verified
 JWT's `jti` in addition to `sid`/`sub` for user tokens or `azp` for machine
