@@ -9,7 +9,9 @@
 		"seed:admin": "bun run scripts/seed-admin.ts",
 		"seed:user": "bun run scripts/seed-user.ts",
 		"seed:clients": "bun run scripts/seed-clients.ts",
-		"clients": "bun run scripts/clients.ts"
+		"clients": "bun run scripts/clients.ts",
+		"revoke-user": "bun run scripts/revoke-user.ts",
+		"test": "bun run scripts/run-tests.ts"
 	},
 	"dependencies": {
 		"@better-auth/oauth-provider": "^1.6.23",
@@ -38,6 +40,7 @@
 		"@types/node": "^20",
 		"@types/react": "catalog:",
 		"@types/react-dom": "catalog:",
+		"pg": "^8.22.0",
 		"tailwindcss": "catalog:",
 		"typescript": "catalog:"
 	}

@@ -26,6 +26,9 @@ export const env = createEnv({
 		/** Provisioning admin used by seed/CLI scripts (dev/ops only). */
 		IDP_ADMIN_EMAIL: z.string().optional(),
 		IDP_ADMIN_PASSWORD: z.string().optional(),
+		/** Provider-neutral transactional email webhook (required in production). */
+		MAILER_WEBHOOK_URL: z.url().optional(),
+		MAILER_WEBHOOK_TOKEN: z.string().optional(),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,

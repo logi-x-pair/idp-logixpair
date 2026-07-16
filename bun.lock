@@ -48,6 +48,7 @@
         "@types/node": "^20",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
+        "pg": "^8.22.0",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
       },
@@ -69,6 +70,7 @@
         "@krazil-idp/env": "workspace:*",
         "better-auth": "catalog:",
         "dotenv": "catalog:",
+        "drizzle-orm": "^0.45.2",
         "zod": "catalog:",
       },
       "devDependencies": {

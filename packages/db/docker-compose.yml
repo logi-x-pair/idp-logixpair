@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: krazil-idp
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in packages/db/.env or the environment}
     ports:
       - "5433:5432"
     volumes:

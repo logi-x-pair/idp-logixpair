@@ -36,19 +36,37 @@ export const consoleMailer: Mailer = {
 	},
 };
 
-/** Production guard: refuses delivery until a real provider is wired in. */
-const failClosedMailer: Mailer = {
-	send() {
-		return Promise.reject(
-			new Error(
-				"No mailer configured for production. Implement Mailer against your email provider in packages/auth/src/email.ts (see NEW_BRAND.md).",
-			),
-		);
+/**
+ * Production webhook mailer. The endpoint contract is deliberately generic:
+ * POST JSON `{ to, subject, html, text }`; authentication is a bearer token
+ * when `MAILER_WEBHOOK_TOKEN` is set. No provider SDK or brand-specific code
+ * is required in a deployment.
+ */
+const webhookMailer: Mailer = {
+	async send(message) {
+		if (!env.MAILER_WEBHOOK_URL) {
+			throw new Error(
+				"MAILER_WEBHOOK_URL is required in production; refusing to drop transactional email.",
+			);
+		}
+		const response = await fetch(env.MAILER_WEBHOOK_URL, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				...(env.MAILER_WEBHOOK_TOKEN
+					? { Authorization: `Bearer ${env.MAILER_WEBHOOK_TOKEN}` }
+					: {}),
+			},
+			body: JSON.stringify(message),
+		});
+		if (!response.ok) {
+			throw new Error(`Mailer webhook returned HTTP ${response.status}`);
+		}
 	},
 };
 
 export const mailer: Mailer =
-	env.NODE_ENV === "production" ? failClosedMailer : consoleMailer;
+	env.NODE_ENV === "production" ? webhookMailer : consoleMailer;
 
 function brandedEmail(
 	heading: string,
