@@ -121,6 +121,10 @@ export function createAuth() {
 				refreshTokenExpiresIn: TOKEN_LIFETIMES.refreshTokenSeconds,
 				codeExpiresIn: TOKEN_LIFETIMES.codeSeconds,
 				scopeExpirations: SCOPE_EXPIRATIONS,
+				// Unique token id for individual RFC 7009 revocation. JWTs keep
+				// this signed claim for their lifetime; opaque-token introspection
+				// may surface a fresh informational id that is never denylisted.
+				customAccessTokenClaims: () => ({ jti: crypto.randomUUID() }),
 				// Token prefixes for secret scanners. Set BEFORE the first
 				// production deploy; IMMUTABLE afterwards (RUNBOOK.md).
 				prefix: {

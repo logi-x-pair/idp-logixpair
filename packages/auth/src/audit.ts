@@ -13,6 +13,7 @@ export type AuditEvent =
 	| "login.locked_out"
 	| "token.issued"
 	| "token.revoked"
+	| "token.revoke_ignored"
 	| "client.secret_rotated"
 	| "consent.granted"
 	| "consent.denied"

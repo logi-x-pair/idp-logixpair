@@ -1,15 +1,43 @@
 import { db } from "@krazil-idp/db";
 import { user } from "@krazil-idp/db/schema/auth";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
+import { env } from "@krazil-idp/env/server";
 import { APIError } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { eq, sql } from "drizzle-orm";
 
 import { audit } from "./audit";
+import {
+	denylistVerifiedAccessToken,
+	isAccessTokenDenylisted,
+	isExpectedRevocationValidationError,
+	type VerifiedRevocableToken,
+	verifyRevocableAccessToken,
+} from "./jwt-revocation";
 import { LOCKOUT } from "./token-config";
 
 function clientIp(headers: Headers | undefined): string | undefined {
 	return headers?.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined;
+}
+
+function authenticatedClientId(
+	headers: Headers | undefined,
+	body: Record<string, unknown> | undefined,
+): string | undefined {
+	const authorization = headers?.get("authorization");
+	if (authorization?.startsWith("Basic ")) {
+		try {
+			const decoded = Buffer.from(
+				authorization.slice("Basic ".length),
+				"base64",
+			).toString("utf8");
+			const separator = decoded.indexOf(":");
+			return separator > 0 ? decoded.slice(0, separator) : undefined;
+		} catch {
+			return undefined;
+		}
+	}
+	return typeof body?.client_id === "string" ? body.client_id : undefined;
 }
 
 const maxLockExponent = Math.ceil(
@@ -110,9 +138,57 @@ export const auditHook = createAuthMiddleware(async (ctx) => {
 			});
 			return;
 		}
+		case "/oauth2/introspect": {
+			if (failed) return;
+			const introspection = returned as
+				| { active?: unknown; jti?: unknown }
+				| undefined;
+			if (
+				introspection?.active !== true ||
+				typeof introspection.jti !== "string" ||
+				!(await isAccessTokenDenylisted(introspection.jti))
+			) {
+				return;
+			}
+			return { active: false };
+		}
+
 		case "/oauth2/revoke": {
 			if (failed) return;
-			audit("token.revoked", { clientId: ctx.body?.client_id, ip });
+			const token =
+				typeof ctx.body?.token === "string" ? ctx.body.token : undefined;
+			const clientId = authenticatedClientId(
+				ctx.headers,
+				ctx.body as Record<string, unknown> | undefined,
+			);
+			let claims: VerifiedRevocableToken | undefined;
+			if (token && clientId) {
+				try {
+					// The plugin can convert invalid-JWT BAD_REQUEST into null, so
+					// independently verify signature/iss/aud and require azp ownership.
+					claims = await verifyRevocableAccessToken({
+						token,
+						issuer: ctx.context.baseURL,
+						audience: env.OAUTH_VALID_AUDIENCES
+							? env.OAUTH_VALID_AUDIENCES.split(",")
+									.map((audience) => audience.trim())
+									.filter(Boolean)
+							: ctx.context.baseURL,
+						expectedClientId: clientId,
+					});
+				} catch (error) {
+					if (!isExpectedRevocationValidationError(error)) throw error;
+					// RFC 7009 does not reveal invalid/foreign token details.
+				}
+			}
+			if (!claims) {
+				audit("token.revoke_ignored", { clientId, ip });
+				return;
+			}
+			// Persistence failures must surface; reporting success here would leave
+			// a stolen token active while claiming it was revoked.
+			await denylistVerifiedAccessToken(claims);
+			audit("token.revoked", { clientId, ip, jti: claims.jti });
 			return;
 		}
 		case "/oauth2/client/rotate-secret": {

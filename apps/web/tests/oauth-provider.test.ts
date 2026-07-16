@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { auth } from "@krazil-idp/auth";
+import { verifyRevocableAccessToken } from "@krazil-idp/auth/jwt-revocation";
 import { LOCKOUT } from "@krazil-idp/auth/token-config";
 import { db } from "@krazil-idp/db";
 import {
@@ -9,6 +10,7 @@ import {
 	verification,
 } from "@krazil-idp/db/schema/auth";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
+import { revokedToken } from "@krazil-idp/db/schema/revocation";
 import { eq } from "drizzle-orm";
 
 const issuer = "http://localhost:3000/api/auth";
@@ -78,6 +80,70 @@ async function token(
 			body: formBody({ client_id: clientId, ...values }),
 		}),
 	);
+}
+
+async function issueJwt(
+	state: string,
+	verifier: string,
+): Promise<{ accessToken: string; claims: Record<string, unknown> }> {
+	const code = await authorizationCode(state, verifier);
+	const response = await token({
+		grant_type: "authorization_code",
+		code,
+		redirect_uri: callback,
+		code_verifier: verifier,
+		resource: issuer,
+	});
+	expect(response.status).toBe(200);
+	const body = (await response.json()) as { access_token: string };
+	const encodedPayload = body.access_token.split(".")[1];
+	if (!encodedPayload) throw new Error("Access token is not a JWT");
+	const claims = JSON.parse(
+		Buffer.from(encodedPayload, "base64url").toString("utf8"),
+	) as Record<string, unknown>;
+	return { accessToken: body.access_token, claims };
+}
+
+async function revokeAccessToken(
+	id: string,
+	secret: string,
+	accessToken: string,
+	tokenTypeHint: "access_token" | undefined = "access_token",
+): Promise<Response> {
+	return auth.handler(
+		new Request(`${issuer}/oauth2/revoke`, {
+			method: "POST",
+			headers: {
+				authorization: basicAuth(id, secret),
+				"content-type": "application/x-www-form-urlencoded",
+			},
+			body: formBody({
+				token: accessToken,
+				...(tokenTypeHint ? { token_type_hint: tokenTypeHint } : {}),
+				client_id: id,
+			}),
+		}),
+	);
+}
+
+async function introspectAccessToken(accessToken: string): Promise<Response> {
+	return auth.handler(
+		new Request(`${issuer}/oauth2/introspect`, {
+			method: "POST",
+			headers: {
+				authorization: basicAuth(clientId, clientSecret),
+				"content-type": "application/x-www-form-urlencoded",
+			},
+			body: formBody({ token: accessToken, client_id: clientId }),
+		}),
+	);
+}
+
+async function revokedRows(jti: string) {
+	return db
+		.select({ expiresAt: revokedToken.expiresAt })
+		.from(revokedToken)
+		.where(eq(revokedToken.jti, jti));
 }
 
 beforeAll(async () => {
@@ -351,6 +417,114 @@ describe("OAuth 2.1 provider contract", () => {
 		expect(body.id_token).toBeString();
 		expect(body.refresh_token).toBeString();
 		expect(body.token_type).toBe("Bearer");
+	});
+
+	test("JWT revocation requires a valid owned token", async () => {
+		const { accessToken, claims } = await issueJwt(
+			"jwt-ownership",
+			"j".repeat(43),
+		);
+		expect(claims.jti).toBeString();
+		expect(claims.azp).toBe(clientId);
+		expect(claims.exp).toBeNumber();
+		const jti = claims.jti as string;
+		const otherClient = await auth.api.adminCreateOAuthClient({
+			headers: adminHeaders,
+			body: {
+				client_name: `Revocation Ownership ${Date.now()}`,
+				redirect_uris: [callback],
+				scope: "openid",
+				skip_consent: true,
+				token_endpoint_auth_method: "client_secret_basic",
+				grant_types: ["authorization_code"],
+				response_types: ["code"],
+			},
+		});
+		const foreignRevoke = await revokeAccessToken(
+			otherClient.client_id,
+			otherClient.client_secret,
+			accessToken,
+		);
+		expect(foreignRevoke.status).toBe(200);
+		const afterForeign = await introspectAccessToken(accessToken);
+		expect(afterForeign.status).toBe(200);
+		expect((await afterForeign.json()).active).toBe(true);
+		expect(await revokedRows(jti)).toHaveLength(0);
+
+		const forgedJti = crypto.randomUUID();
+		const forgedHeader = Buffer.from(
+			JSON.stringify({ alg: "EdDSA", typ: "JWT" }),
+		).toString("base64url");
+		const forgedPayload = Buffer.from(
+			JSON.stringify({
+				iss: issuer,
+				aud: issuer,
+				azp: clientId,
+				jti: forgedJti,
+				exp: Math.floor(Date.now() / 1000) + 600,
+			}),
+		).toString("base64url");
+		const forgedToken = `${forgedHeader}.${forgedPayload}.AA`;
+		let forgedRejected = false;
+		try {
+			await verifyRevocableAccessToken({
+				token: forgedToken,
+				issuer,
+				audience: issuer,
+				expectedClientId: clientId,
+			});
+		} catch {
+			forgedRejected = true;
+		}
+		expect(forgedRejected).toBe(true);
+		expect(await revokedRows(forgedJti)).toHaveLength(0);
+	});
+
+	test("owned JWT revocation disables introspection and status", async () => {
+		const { accessToken, claims } = await issueJwt(
+			"jwt-own-revoke",
+			"k".repeat(43),
+		);
+		const jti = claims.jti as string;
+		try {
+			const response = await revokeAccessToken(
+				clientId,
+				clientSecret,
+				accessToken,
+			);
+			expect(response.status).toBe(200);
+			const rows = await revokedRows(jti);
+			expect(rows).toHaveLength(1);
+			expect(rows[0].expiresAt.getTime()).toBeLessThanOrEqual(
+				(claims.exp as number) * 1000,
+			);
+			const introspection = await introspectAccessToken(accessToken);
+			expect(introspection.status).toBe(200);
+			expect(await introspection.json()).toEqual({ active: false });
+
+			if (accessTokenMode !== "short-lived") {
+				const secret = process.env.OAUTH_REVOCATION_CHECK_SECRET;
+				if (!secret) throw new Error("Revocation test secret is missing");
+				const status = await auth.handler(
+					new Request(`${issuer}/token-revocation-status`, {
+						method: "POST",
+						headers: {
+							Authorization: `Bearer ${secret}`,
+							"content-type": "application/json",
+						},
+						body: JSON.stringify({
+							sid: claims.sid,
+							sub: claims.sub,
+							jti,
+						}),
+					}),
+				);
+				expect(status.status).toBe(200);
+				expect(await status.json()).toEqual({ active: false });
+			}
+		} finally {
+			await db.delete(revokedToken).where(eq(revokedToken.jti, jti));
+		}
 	});
 
 	test("wrong PKCE verifier is rejected", async () => {

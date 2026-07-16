@@ -2,11 +2,14 @@ import { createAuthEndpoint } from "better-auth/api";
 import { constantTimeEqual } from "better-auth/crypto";
 import { z } from "zod";
 
+import { isAccessTokenDenylisted } from "./jwt-revocation";
+
 const statusBody = z
 	.object({
 		sid: z.string().min(1).optional(),
 		sub: z.string().min(1).optional(),
 		azp: z.string().min(1).optional(),
+		jti: z.string().min(1).optional(),
 	})
 	.refine(
 		(value) =>
@@ -39,7 +42,10 @@ export function revocationStatus(options: { secret: string }) {
 						});
 					}
 
-					const { sid, sub, azp } = ctx.body;
+					const { sid, sub, azp, jti } = ctx.body;
+					if (jti && (await isAccessTokenDenylisted(jti))) {
+						return ctx.json({ active: false });
+					}
 					let active = false;
 					if (sid && sub) {
 						const session = (await ctx.context.adapter.findOne({

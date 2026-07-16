@@ -11,6 +11,7 @@
 		"seed:clients": "bun run scripts/seed-clients.ts",
 		"clients": "bun run scripts/clients.ts",
 		"revoke-user": "bun run scripts/revoke-user.ts",
+		"revoke-token": "bun run scripts/revoke-token.ts",
 		"test": "bun run scripts/run-tests.ts"
 	},
 	"dependencies": {
