@@ -145,12 +145,18 @@ first. See `INTEGRATION.md` for the flow and `RUNBOOK.md` for operations.
 - HTTPS is mandatory in production. HSTS is emitted only when `NODE_ENV=production`.
 - Better Auth global/per-endpoint rate limiting is enabled; OAuth endpoint defaults are per-IP and documented in the plugin source/docs.
 
-Token lifetimes are explicit in `packages/auth/src/token-config.ts` and retain plugin defaults: access 1 hour, machine-to-machine 1 hour, ID token 10 hours, refresh 30 days, authorization code 10 minutes. High-privilege scopes belong in `SCOPE_EXPIRATIONS` with a shorter 5–15 minute value.
+Token lifetimes are explicit in `packages/auth/src/token-config.ts`: the
+`short-lived` authorization-code mode uses 10 minutes, `hybrid` and
+`immediate` use 1 hour with live authorization checks, machine-to-machine
+tokens use 1 hour, ID tokens use 10 hours, refresh tokens 30 days, and
+authorization codes 10 minutes. High-privilege scopes belong in
+`SCOPE_EXPIRATIONS` with a shorter 5–15 minute value.
 
 Access-token authorization modes are selected with `OAUTH_ACCESS_TOKEN_MODE`:
 
-- `short-lived` (default): local JWKS verification; use short
-  `scopeExpirations` values when a smaller stolen-token window is required.
+- `short-lived` (default): local JWKS verification with a 10-minute
+  authorization-code access-token TTL. Machine tokens retain their one-hour
+  configured TTL.
 - `hybrid`: local verification for normal traffic and a live session/user
   authorization check on high-risk resource routes.
 - `immediate`: the same authoritative session/user check on every protected
@@ -170,6 +176,11 @@ OAuth introspection: OAuth Provider 1.6.23 can report a deleted-session JWT as
 `active`. If a deployment instead needs database-backed opaque tokens, treat
 `disableJwtPlugin` as a deliberate fresh-deployment migration, not a runtime
 switch for existing clients.
+
+Machine-to-machine JWTs have no `sid`/`sub`; hybrid and immediate checks use
+their verified `azp` to require a live, enabled OAuth client. Disabling that
+client rejects all of its machine tokens at the next status check. Selecting one
+individual machine JWT still requires an opaque token or `jti` denylist.
 
 OAuth endpoint limits are per-IP and reset after the window:
 

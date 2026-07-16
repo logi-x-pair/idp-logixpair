@@ -108,10 +108,11 @@ const payload = await resourceClient.verifyAccessToken(accessToken, {
 ```
 
 For `hybrid` mode, call the private `token-revocation-status` endpoint after
-local verification on high-risk routes. Send the verified JWT's `sid` and `sub`
-with `OAUTH_REVOCATION_CHECK_SECRET`; the IdP checks that the matching session
-still exists and has not expired. In `immediate` mode, make this check on every
-protected resource request. Fail closed if the status service is unavailable.
+local verification on high-risk routes. For user tokens, send the verified
+JWT's `sid` and `sub`; for machine-to-machine tokens, send its `azp`. The IdP
+requires a live session owned by that user or an enabled OAuth client,
+respectively. In `immediate` mode, make this check on every protected resource
+request. Fail closed if the status service is unavailable.
 This is session/user termination, not token-specific JWT revocation; the
 provider cannot invalidate an individual JWT through `/oauth2/revoke`.
 

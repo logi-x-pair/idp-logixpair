@@ -50,7 +50,20 @@ This immediately:
 - marks every refresh token revoked, blocking new access-token issuance;
 - deletes stored opaque access tokens.
 
-It does **not** un-issue JWT access tokens. Already-issued JWTs remain valid until their access-token TTL, including through `/oauth2/introspect` in OAuth Provider 1.6.23 (the endpoint removes a missing `sid` but still returns `active: true`). Sensitive scopes should have a 5–15 minute `scopeExpirations` entry in `packages/auth/src/token-config.ts` before deployment.
+Revocation behavior depends on the configured resource-server mode:
+
+- `short-lived`: authorization-code JWTs remain usable by local verification
+  until their 10-minute TTL; machine tokens retain their one-hour TTL.
+- `hybrid`: high-risk routes reject deleted-session user JWTs at the next
+  status check; normal local-only routes retain the JWT TTL behavior.
+- `immediate`: every status-aware protected route rejects deleted-session user
+  JWTs at the next check.
+
+Raw JWKS verification and OAuth Provider 1.6.23 `/oauth2/introspect` still
+report deleted-session JWTs as active until expiry. Machine-to-machine status
+checks use `azp` and the OAuth client enabled state. Individual JWT revocation
+still requires an opaque token or a `jti`/token-hash denylist; key rotation is
+the global emergency fallback.
 
 ## Leaked signing key: nuclear rotation
 
