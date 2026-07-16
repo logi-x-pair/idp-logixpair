@@ -1,0 +1,21 @@
+{
+	"name": "test-rp",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun run server.ts",
+		"start": "bun run server.ts",
+		"test:e2e": "playwright test",
+		"check-types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@better-auth/oauth-provider": "1.6.23",
+		"better-auth": "1.6.23",
+		"openid-client": "6.8.4"
+	},
+	"devDependencies": {
+		"@playwright/test": "1.61.1",
+		"@types/bun": "1.3.14",
+		"dotenv": "17.4.2"
+	}
+}

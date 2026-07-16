@@ -1,11 +1,26 @@
-import type { ClientSeed } from "@krazil-idp/auth/seed-types";
+/**
+ * Shape of a first-party client definition for this deployment. This type is
+ * local so the branding package remains dependency-free and can be merged
+ * independently of the auth implementation.
+ */
+export interface ClientSeed {
+	name: string;
+	redirectUris: string[];
+	postLogoutRedirectUris?: string[];
+	uri?: string;
+	icon?: string;
+	scope?: string;
+	type: "confidential" | "public";
+	skipConsent: boolean;
+	enableEndSession: boolean;
+}
 
 /**
  * First-party relying parties for THIS brand deployment.
  *
  * Edit this list when deploying for a new brand (see NEW_BRAND.md), then run
  * `bun run seed:clients` from apps/web. The template ships with two demo apps
- * that double as the end-to-end verification RPs.
+ * and one consent demo.
  */
 export const clientSeeds: ClientSeed[] = [
 	{
@@ -31,8 +46,7 @@ export const clientSeeds: ClientSeed[] = [
 		enableEndSession: true,
 	},
 	{
-		// Demonstrates the consent screen: NOT a trusted client, so users are
-		// asked to approve requested scopes on first authorization.
+		// Demonstrates the consent screen: NOT a trusted client.
 		name: "Consent Demo App",
 		redirectUris: ["http://localhost:4003/callback"],
 		uri: "http://localhost:4003",
@@ -41,5 +55,27 @@ export const clientSeeds: ClientSeed[] = [
 		type: "confidential",
 		skipConsent: false,
 		enableEndSession: false,
+	},
+	{
+		name: "Test RP One",
+		redirectUris: ["http://localhost:4101/callback"],
+		postLogoutRedirectUris: ["http://localhost:4101/"],
+		uri: "http://localhost:4101",
+		icon: "http://localhost:4101/icon.svg",
+		scope: "openid profile email offline_access",
+		type: "confidential",
+		skipConsent: true,
+		enableEndSession: true,
+	},
+	{
+		name: "Test RP Two",
+		redirectUris: ["http://localhost:4102/callback"],
+		postLogoutRedirectUris: ["http://localhost:4102/"],
+		uri: "http://localhost:4102",
+		icon: "http://localhost:4102/icon.svg",
+		scope: "openid profile email offline_access",
+		type: "confidential",
+		skipConsent: true,
+		enableEndSession: true,
 	},
 ];
