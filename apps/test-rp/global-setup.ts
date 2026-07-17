@@ -46,9 +46,6 @@ async function postToIssuer(
 
 async function provisionTwoFactorUser(issuer: URL): Promise<void> {
 	const password = requiredEnv("TEST_RP_USER_PASSWORD");
-	if (password.length < 12) {
-		throw new Error("TEST_RP_USER_PASSWORD must be at least 12 characters");
-	}
 	const email = `e2e-two-factor-${Date.now()}@example.com`;
 	const signup = await postToIssuer(issuer, "/sign-up/email", {
 		name: "E2E Two Factor User",
@@ -99,6 +96,11 @@ export default async function globalSetup(_config: FullConfig) {
 	const name = process.env.TEST_RP_USER_NAME ?? "E2E Test User";
 	const email = requiredEnv("TEST_RP_USER_EMAIL");
 	const password = requiredEnv("TEST_RP_USER_PASSWORD");
+	if (password.length < 12) {
+		throw new Error(
+			"TEST_RP_USER_PASSWORD must be at least 12 characters (IdP minPasswordLength).",
+		);
+	}
 	const endpoint = (path: string) =>
 		new URL(
 			`${issuer.pathname.replace(/\/$/, "")}/${path.replace(/^\/+/, "")}`,

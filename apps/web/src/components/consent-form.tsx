@@ -36,6 +36,16 @@ export default function ConsentForm() {
 			setLoadError("Missing client identifier — this consent link is invalid.");
 			return;
 		}
+		// A genuine provider redirect always carries the signed query material
+		// (ba_param list + sig). Links missing it were not issued by the
+		// authorization flow — reject before rendering any client branding so a
+		// bare /consent?client_id=… link cannot spoof a trusted application.
+		if (!params.get("sig") || params.getAll("ba_param").length === 0) {
+			setLoadError(
+				"This consent link is invalid — it was not issued by the authorization flow.",
+			);
+			return;
+		}
 		authClient.oauth2
 			.publicClient({ query: { client_id: clientId } })
 			.then(({ data, error }) => {

@@ -108,6 +108,7 @@ After five failed attempts, the database-backed lockout applies exponential back
 
 - `login.failure`
 - `login.locked_out`
+- `login.two_factor_failure`
 - `login.success`
 
 Investigate credential stuffing by email and source IP. Do not manually clear a real user's row without identity verification and an incident record.
@@ -120,8 +121,40 @@ The account lockout budget allows five failed TOTP/backup-code attempts and then
 
 ## Audit events
 
-The auth hook emits structured JSON for login, token issuance/revocation, client secret rotation, and consent grant/deny/revoke. Ship stdout to the production logging/SIEM pipeline. Audit records must not contain passwords, client secrets, tokens, authorization codes, or token-bearing email URLs.
+The auth hook emits structured JSON for login (including `login.two_factor_failure`), token issuance/revocation, OAuth client create/update/delete and secret rotation, and consent grant/deny/revoke. Ship stdout to the production logging/SIEM pipeline. Audit records must not contain passwords, client secrets, tokens, authorization codes, or token-bearing email URLs.
 
 ## RP-initiated logout limitation
 
 `/oauth2/end-session` ends the IdP browser session. It cannot delete another relying party's local session cookie. Each RP must clear its own local session before redirecting to end-session; multi-RP single logout requires explicit front/back-channel coordination outside the currently installed plugin. The test harness demonstrates this with a clearly labelled `RP_PEER_LOGOUT_URL` callback and does not claim end-session alone clears RP2.
+
+## Adopting migrations on a push-managed database
+
+A development database provisioned with `bun run db:push` has no migration
+bookkeeping. Running `bun run db:migrate` against it replays `0000` onto
+existing tables and aborts (`relation "user" already exists`). Baseline it once:
+
+```bash
+bun run db:baseline   # inserts journal hashes; refuses if tables are missing
+bun run db:migrate    # then applies only migrations newer than the baseline
+```
+
+`db:baseline` is idempotent (re-running reports "already baselined") and refuses
+to run against a partially migrated database. Verify the committed migration
+chain still matches the schema on a throwaway database as a re-runnable drill:
+
+```bash
+docker exec krazil-idp-postgres psql -U postgres -c 'CREATE DATABASE krazil_idp_migrate_check'
+cd packages/db && DATABASE_URL=postgresql://postgres:$POSTGRES_PASSWORD@localhost:5433/krazil_idp_migrate_check bunx drizzle-kit migrate
+DATABASE_URL=postgresql://postgres:$POSTGRES_PASSWORD@localhost:5433/krazil_idp_migrate_check bunx drizzle-kit push   # must report "No changes detected"
+docker exec krazil-idp-postgres psql -U postgres -c 'DROP DATABASE krazil_idp_migrate_check'
+```
+
+## Deployment configuration
+
+- Set `TRUSTED_PROXIES` to the IPs/CIDRs of your reverse proxies so Better Auth
+  trusts `x-forwarded-for` only from those hops. Without it the first forwarded
+  value is trusted blindly and any client can spoof its rate-limit and audit IP.
+  Leave it empty only when the proxy strips inbound forwarding headers.
+- Set `RATE_LIMIT_STORAGE=database` before running more than one instance;
+  in-memory counters are per-process and reset on restart. The `rate_limit`
+  table ships in migration `0003`.

@@ -174,3 +174,29 @@ test("2FA preserves signed OAuth state through verification", async ({
 	await expect(page.getByTestId("callback-proof")).toContainText("code=true");
 	expect(sawLoginFormOnRp2).toBe(false);
 });
+
+test("consent screen rejects links without signed query material", async ({
+	page,
+}) => {
+	// The consent route redirects unauthenticated visitors to sign-in, so an
+	// IdP session must exist before the guard can render.
+	await page.goto("http://localhost:4101/");
+	await page.getByRole("link", { name: /Sign in with/ }).click();
+	await expect(page).toHaveURL(/localhost:3000\/sign-in/);
+	await page.getByLabel("Email").fill(email);
+	await page.getByLabel("Password").fill(password);
+	await page.getByRole("button", { name: "Sign in" }).click();
+	await expect(page).toHaveURL("http://localhost:4101/");
+
+	// A bare consent link carrying a client_id but no signed query material
+	// (ba_param + sig) must be refused before any client branding renders.
+	const clientId = process.env.E2E_RP1_CLIENT_ID ?? "unknown-client";
+	await page.goto(
+		`http://localhost:3000/consent?client_id=${clientId}&scope=openid`,
+	);
+	await expect(
+		page.getByText("This consent link is invalid", { exact: false }),
+	).toBeVisible();
+	await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+});

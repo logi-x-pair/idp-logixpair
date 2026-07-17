@@ -91,6 +91,17 @@ Set `TWO_FACTOR_ENABLED=true` to expose TOTP enrollment, backup-code display, an
 
 During an OIDC login, Better Auth signs the `oauth_query` on the initial sign-in request. If the user needs 2FA, the client navigates to `/two-factor` while retaining the current query string. The OAuth client plugin signs and forwards that query on the TOTP or backup-code POST, allowing the provider to restore OAuth state and return the normal authorization callback after verification. Never replace this with a client-supplied redirect or an unsigned query.
 
+## Consent screen integrity
+
+The consent screen renders the requesting application's identity (name, logo,
+URI) from the same query parameters that the provider's signed `oauth_query`
+covers (`ba_param` list + `sig`). Links missing that signature material are
+rejected at display time, and tampered links fail signature verification when
+the grant is submitted — so no grant can complete under mismatched branding.
+This is display-integrity defense-in-depth; the authorization decision itself is
+always bound to the signed query, never to the unsigned `client_id` URL
+parameter alone.
+
 ## Resource-server verification
 
 Prefer local JWT verification for normal traffic. The resource server still derives issuer, audience, and JWKS URL from discovery/configuration; it does not invent endpoint paths. With the provider resource client:

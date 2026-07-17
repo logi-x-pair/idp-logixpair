@@ -58,7 +58,9 @@ Set, at minimum:
 - `OAUTH_ADMIN_EMAILS`, `IDP_ADMIN_EMAIL`, and `IDP_ADMIN_PASSWORD` for the operator bootstrap; use a 12+ character admin password.
 - `REQUIRE_EMAIL_VERIFICATION` if unverified password sign-in must be blocked after verification mail is sent.
 - `TWO_FACTOR_ENABLED=true` to expose opt-in TOTP enrollment; the plugin remains mounted when false, so an already-enrolled account still requires 2FA.
-- `MAILER_WEBHOOK_URL` and optional `MAILER_WEBHOOK_TOKEN` for transactional email delivery.
+- `MAILER_WEBHOOK_URL` for transactional email delivery; `MAILER_WEBHOOK_TOKEN` is required in production so the webhook receiver can authenticate this IdP.
+- `RATE_LIMIT_STORAGE=database` before running more than one instance (in-memory counters are per-process); the `rate_limit` table ships in migration `0003`.
+- `TRUSTED_PROXIES` set to your reverse proxies' IPs/CIDRs when behind a proxy, so forwarded client IPs cannot be spoofed.
 
 Never commit either `.env` file. Use a secret manager in production.
 
@@ -81,7 +83,9 @@ Use `skipConsent: true` only for first-party trusted clients. Keep `enableEndSes
 
 ```bash
 bun install
+# Fresh database:
 bun run db:migrate
+# Existing push-managed database: run `bun run db:baseline` once, then `bun run db:migrate`.
 bun run build
 bun --cwd apps/web run start
 ```
@@ -118,4 +122,5 @@ Constraint 9 is what keeps this merge path low-conflict: all brand-specific valu
 - [ ] Operator is provisioned and client seed output is stored securely.
 - [ ] Discovery, JWKS, health, login, callback, logout, and a relying-party smoke test pass.
 - [ ] `REQUIRE_EMAIL_VERIFICATION` and `TWO_FACTOR_ENABLED` have intentional values documented; setting the 2FA flag false does not disable already-enrolled accounts.
-- [ ] `MAILER_WEBHOOK_URL` (and optional token) is configured; the production mailer fails closed when absent.
+- [ ] `MAILER_WEBHOOK_URL` is configured and `MAILER_WEBHOOK_TOKEN` is set (required in production); the production mailer fails closed when the URL is absent.
+- [ ] `RATE_LIMIT_STORAGE` and `TRUSTED_PROXIES` have intentional values for the deployment's instance count and proxy topology.

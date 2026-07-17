@@ -4,10 +4,10 @@ import type { NextConfig } from "next";
 const isProduction = process.env.NODE_ENV === "production";
 
 /**
- * Security headers for every response. Auth pages must never be framed
- * (clickjacking on login/consent), and CSP keeps script execution local.
- * Next.js requires `unsafe-inline` for its generated styles and runtime
- * scripts; `unsafe-eval` is allowed only in development for the dev server.
+ * Static security headers for every response. Auth pages must never be framed
+ * (clickjacking on login/consent). The Content-Security-Policy is emitted here
+ * ONLY in development (relaxed, for Turbopack HMR); production CSP is
+ * nonce-based and set per-request in src/proxy.ts.
  */
 const securityHeaders = [
 	{ key: "X-Frame-Options", value: "DENY" },
@@ -18,19 +18,24 @@ const securityHeaders = [
 		key: "Permissions-Policy",
 		value: "camera=(), microphone=(), geolocation=()",
 	},
-	{
-		key: "Content-Security-Policy",
-		value: [
-			"default-src 'self'",
-			`script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
-			"style-src 'self' 'unsafe-inline'",
-			// Production: HTTPS only. Dev additionally allows localhost HTTP RP icons.
-			`img-src 'self' data: https:${isProduction ? "" : " http:"}`,
-			"frame-ancestors 'none'",
-			"base-uri 'self'",
-			"form-action 'self'",
-		].join("; "),
-	},
+	// Development-only relaxed CSP: HMR needs 'unsafe-inline'/'unsafe-eval' and
+	// localhost HTTP RP icons. Production CSP lives in src/proxy.ts (nonce).
+	...(isProduction
+		? []
+		: [
+				{
+					key: "Content-Security-Policy",
+					value: [
+						"default-src 'self'",
+						"script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+						"style-src 'self' 'unsafe-inline'",
+						"img-src 'self' data: https: http:",
+						"frame-ancestors 'none'",
+						"base-uri 'self'",
+						"form-action 'self'",
+					].join("; "),
+				},
+			]),
 	...(isProduction
 		? [
 				{
@@ -42,6 +47,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+	poweredByHeader: false,
 	typedRoutes: true,
 	reactCompiler: true,
 	async headers() {
