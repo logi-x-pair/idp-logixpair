@@ -2,7 +2,7 @@ import { db } from "@krazil-idp/db";
 import { user } from "@krazil-idp/db/schema/auth";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
 import { env } from "@krazil-idp/env/server";
-import { APIError } from "better-auth";
+import { APIError, type BetterAuthPlugin } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { eq, sql } from "drizzle-orm";
 
@@ -125,8 +125,34 @@ export const auditHook = createAuthMiddleware(async (ctx) => {
 		case "/sign-in/email": {
 			const email = (ctx.body?.email as string | undefined)?.toLowerCase();
 			if (!email) return;
-			audit(failed ? "login.failure" : "login.success", { email, ip });
 			await recordLoginOutcome(email, failed);
+			const twoFactorPending =
+				!failed &&
+				typeof returned === "object" &&
+				returned !== null &&
+				"twoFactorRedirect" in returned &&
+				returned.twoFactorRedirect === true;
+			if (twoFactorPending) return;
+			audit(failed ? "login.failure" : "login.success", { email, ip });
+			return;
+		}
+		case "/two-factor/verify-totp":
+		case "/two-factor/verify-backup-code": {
+			if (failed) return;
+			const incomingSession = await ctx.getSignedCookie(
+				ctx.context.authCookies.sessionToken.name,
+				ctx.context.secret,
+			);
+			// A request with an existing session is enrollment/settings verification,
+			// not completion of a challenged login.
+			if (incomingSession) return;
+			const email = ctx.context.newSession?.user.email?.toLowerCase();
+			if (!email) return;
+			audit("login.success", {
+				email,
+				ip,
+				factor: ctx.path === "/two-factor/verify-totp" ? "totp" : "backup-code",
+			});
 			return;
 		}
 		case "/oauth2/token": {
@@ -218,3 +244,18 @@ export const auditHook = createAuthMiddleware(async (ctx) => {
 			return;
 	}
 });
+
+/** Runs after built-in plugin hooks so audit records reflect the final result. */
+export function securityAuditPlugin(): BetterAuthPlugin {
+	return {
+		id: "security-audit",
+		hooks: {
+			after: [
+				{
+					matcher: () => true,
+					handler: auditHook,
+				},
+			],
+		},
+	};
+}

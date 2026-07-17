@@ -11,6 +11,10 @@ export const env = createEnv({
 		NODE_ENV: z
 			.enum(["development", "production", "test"])
 			.default("development"),
+		/** Sends verification on signup; optionally blocks unverified sign-in. */
+		REQUIRE_EMAIL_VERIFICATION: z.enum(["true", "false"]).default("false"),
+		/** Exposes opt-in 2FA enrollment UI; enrolled accounts remain enforced. */
+		TWO_FACTOR_ENABLED: z.enum(["true", "false"]).default("false"),
 		/** Access-token authorization policy; see README and INTEGRATION.md. */
 		OAUTH_ACCESS_TOKEN_MODE: z
 			.enum(["short-lived", "hybrid", "immediate"])
@@ -40,3 +44,22 @@ export const env = createEnv({
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 	emptyStringAsUndefined: true,
 });
+
+const isProductionBuildPhase =
+	process.env.NEXT_PHASE === "phase-production-build" ||
+	process.env.npm_lifecycle_event === "build";
+
+if (
+	env.NODE_ENV === "production" &&
+	!process.env.SKIP_ENV_VALIDATION &&
+	!isProductionBuildPhase
+) {
+	if (!env.MAILER_WEBHOOK_URL) {
+		throw new Error(
+			"MAILER_WEBHOOK_URL is required in production; refusing to start without transactional email delivery.",
+		);
+	}
+	if (!env.BETTER_AUTH_URL.startsWith("https://")) {
+		throw new Error("BETTER_AUTH_URL must use HTTPS in production.");
+	}
+}

@@ -1,14 +1,16 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { branding } from "@krazil-idp/branding/config";
 import { createDb } from "@krazil-idp/db";
 import * as schema from "@krazil-idp/db/schema/auth";
 import { env } from "@krazil-idp/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { jwt } from "better-auth/plugins";
-
+import { jwt } from "better-auth/plugins/jwt";
+import { twoFactor } from "better-auth/plugins/two-factor";
+import { audit } from "./audit";
 import { mailer, resetPasswordEmail, verificationEmail } from "./email";
-import { auditHook, lockoutGuard } from "./guards";
+import { lockoutGuard, securityAuditPlugin } from "./guards";
 import { revocationStatus } from "./revocation-status";
 import { SCOPE_EXPIRATIONS, TOKEN_LIFETIMES } from "./token-config";
 
@@ -52,13 +54,29 @@ export function createAuth() {
 			schema: schema,
 		}),
 		trustedOrigins: [env.CORS_ORIGIN],
+		// Trust this header only when the deployment proxy strips all inbound
+		// client values and writes its own canonical forwarding chain.
+		advanced: {
+			ipAddress: {
+				ipAddressHeaders: ["x-forwarded-for"],
+			},
+		},
 		emailAndPassword: {
 			enabled: true,
+			requireEmailVerification: env.REQUIRE_EMAIL_VERIFICATION === "true",
+			revokeSessionsOnPasswordReset: true,
+			minPasswordLength: 12,
+			onPasswordReset: async ({ user }) => {
+				audit("password.reset", { email: user.email });
+			},
 			sendResetPassword: async ({ user, url }) => {
 				await mailer.send(resetPasswordEmail(user.email, url));
 			},
 		},
 		emailVerification: {
+			sendOnSignUp: true,
+			sendOnSignIn: true,
+			autoSignInAfterVerification: true,
 			sendVerificationEmail: async ({ user, url }) => {
 				await mailer.send(verificationEmail(user.email, url));
 			},
@@ -90,15 +108,27 @@ export function createAuth() {
 		hooks: {
 			// Temporary lockout with exponential backoff after repeated failures.
 			before: lockoutGuard,
-			// Audit log: login success/failure, token issuance, secret rotation,
-			// consent grant/deny/revoke, token revocation.
-			after: auditHook,
 		},
 		plugins: [
 			...(revocationSecret
 				? [revocationStatus({ secret: revocationSecret })]
 				: []),
 			jwt(),
+			twoFactor({
+				issuer: branding.brandName,
+				twoFactorCookieMaxAge: 10 * 60,
+				trustDeviceMaxAge: 30 * 24 * 60 * 60,
+				accountLockout: {
+					enabled: true,
+					maxFailedAttempts: 5,
+					durationSeconds: 15 * 60,
+				},
+				backupCodeOptions: {
+					amount: 10,
+					length: 10,
+					storeBackupCodes: "encrypted",
+				},
+			}),
 			oauthProvider({
 				loginPage: "/sign-in",
 				consentPage: "/consent",
@@ -163,6 +193,8 @@ export function createAuth() {
 						}
 					: {}),
 			}),
+			// Runs after protocol/2FA hooks so audit events reflect final outcomes.
+			securityAuditPlugin(),
 			// nextCookies must stay LAST so it can set cookies from prior plugins' responses.
 			nextCookies(),
 		],

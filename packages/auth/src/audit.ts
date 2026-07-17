@@ -17,7 +17,8 @@ export type AuditEvent =
 	| "client.secret_rotated"
 	| "consent.granted"
 	| "consent.denied"
-	| "consent.revoked";
+	| "consent.revoked"
+	| "password.reset";
 
 export function audit(
 	event: AuditEvent,

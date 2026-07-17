@@ -15,6 +15,13 @@
       "when": 1784223300073,
       "tag": "0001_fine_mimic",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784300054573,
+      "tag": "0002_equal_ultimatum",
+      "breakpoints": true
     }
   ]
 }

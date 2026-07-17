@@ -6,11 +6,12 @@ const isProduction = process.env.NODE_ENV === "production";
 /**
  * Security headers for every response. Auth pages must never be framed
  * (clickjacking on login/consent), and CSP keeps script execution local.
- * `unsafe-inline`/`unsafe-eval` concessions exist only where Next.js requires
- * them (styles always; scripts in dev).
+ * Next.js requires `unsafe-inline` for its generated styles and runtime
+ * scripts; `unsafe-eval` is allowed only in development for the dev server.
  */
 const securityHeaders = [
 	{ key: "X-Frame-Options", value: "DENY" },
+	{ key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 	{ key: "X-Content-Type-Options", value: "nosniff" },
 	{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
 	{
