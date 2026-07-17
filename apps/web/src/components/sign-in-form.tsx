@@ -31,9 +31,11 @@ export default function SignInForm() {
 					password: value.password,
 				},
 				{
-					onSuccess: () => {
-						// Inside an OAuth authorization flow the provider plugin continues
-						// the flow automatically once the session exists — never redirect
+					onSuccess: (context) => {
+						// The 2FA client owns navigation when a second factor is required.
+						if (context.data?.twoFactorRedirect) return;
+						// Inside an OAuth authorization flow the provider continues the
+						// flow automatically once the session exists — never redirect
 						// manually there.
 						if (!inOAuthFlow()) {
 							router.push("/dashboard");

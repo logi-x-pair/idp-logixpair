@@ -43,16 +43,27 @@ export async function adminHeaders(): Promise<Headers> {
 		process.exit(1);
 	}
 
-	let headers: Headers;
-	try {
-		({ headers } = await auth.api.signInEmail({
+	const signedIn = await auth.api
+		.signInEmail({
 			body: { email, password },
 			returnHeaders: true,
-		}));
-	} catch {
+		})
+		.catch(() => null);
+	if (!signedIn) {
 		console.error(`Sign-in as ${email} failed — wrong IDP_ADMIN_PASSWORD?`);
 		process.exit(1);
 	}
+	if (
+		signedIn.response &&
+		"twoFactorRedirect" in signedIn.response &&
+		signedIn.response.twoFactorRedirect
+	) {
+		console.error(
+			`Sign-in as ${email} requires two-factor verification. Operator CLI commands are noninteractive; use a dedicated non-2FA bootstrap operator or disable 2FA from that account's web settings first.`,
+		);
+		process.exit(1);
+	}
+	const { headers } = signedIn;
 	const cookies = headers.getSetCookie().map((c) => c.split(";")[0]);
 	if (cookies.length === 0) {
 		console.error(`Sign-in as ${email} produced no session cookie.`);

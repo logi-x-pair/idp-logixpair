@@ -15,7 +15,12 @@ import type { Route } from "next";
 
 /** True when the current page is part of an in-progress OAuth authorization flow. */
 export function inOAuthFlow(): boolean {
-	return new URLSearchParams(window.location.search).has("oauth_query");
+	const params = new URLSearchParams(window.location.search);
+	// Older provider versions wrapped the signed query in `oauth_query`;
+	// current versions put the signed fields directly in the page query.
+	return (
+		params.has("oauth_query") || (params.has("sig") && params.has("ba_param"))
+	);
 }
 
 /** Path with the current query string preserved (keeps `oauth_query` intact). */

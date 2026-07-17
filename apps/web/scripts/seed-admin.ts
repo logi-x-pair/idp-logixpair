@@ -43,9 +43,16 @@ try {
 	);
 }
 
-// Prove ownership: the configured password must actually sign in.
+// Prove ownership: the configured password must actually sign in. An enrolled
+// account cannot complete this noninteractive bootstrap through a partial 2FA flow.
 try {
-	await auth.api.signInEmail({ body: { email, password } });
+	const signedIn = await auth.api.signInEmail({ body: { email, password } });
+	if ("twoFactorRedirect" in signedIn && signedIn.twoFactorRedirect) {
+		console.error(
+			`REFUSING TO PROMOTE: ${email} requires two-factor verification. Use a dedicated non-2FA bootstrap operator or disable 2FA from that account's web settings first.`,
+		);
+		process.exit(1);
+	}
 } catch {
 	console.error(
 		`REFUSING TO PROMOTE: ${email} exists but IDP_ADMIN_PASSWORD does not match.\n` +
