@@ -243,5 +243,5 @@ OAuth endpoint limits are per-IP and reset after the window:
 | `/oauth2/userinfo` | 60s | 60 |
 
 CSRF posture: Better Auth validates origins on state-changing requests, and the browser client sends same-origin, secure/httpOnly/same-site cookies in production. OAuth clients must generate and verify `state`; the provider verifies signed `oauth_query` and PKCE S256.
-- The production mailer uses the provider-neutral `MAILER_WEBHOOK_URL`/`MAILER_WEBHOOK_TOKEN` environment variables and fails closed when the URL is absent; `MAILER_WEBHOOK_TOKEN` is required in production so the webhook receiver can authenticate this IdP. It never prints token URLs in production.
+- The production mailer sends over SMTP (`MAILER_SMTP_HOST`/`PORT`/`USER`/`PASS`, `MAILER_FROM`) via nodemailer — any provider works with no code change — and fails closed when host/from are absent. STARTTLS is required on non-465 ports so token-bearing links are never sent in plaintext, and it never logs token URLs in production.
 - Local JWT verification is fast but cannot consult the database denylist. `revoke-token` invalidates one known JWT for introspection and status-aware resource servers; signing-key rotation remains the global emergency fallback. Session deletion or OIDC end-session alone does **not** revoke refresh tokens in plugin 1.6.23.

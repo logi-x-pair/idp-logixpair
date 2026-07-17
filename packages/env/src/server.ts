@@ -36,9 +36,13 @@ export const env = createEnv({
 		/** Provisioning admin used by seed/CLI scripts (dev/ops only). */
 		IDP_ADMIN_EMAIL: z.string().optional(),
 		IDP_ADMIN_PASSWORD: z.string().optional(),
-		/** Provider-neutral transactional email webhook (required in production). */
-		MAILER_WEBHOOK_URL: z.url().optional(),
-		MAILER_WEBHOOK_TOKEN: z.string().optional(),
+		/** SMTP transactional email delivery (required in production). Works with any provider. */
+		MAILER_SMTP_HOST: z.string().optional(),
+		MAILER_SMTP_PORT: z.coerce.number().int().positive().default(587),
+		MAILER_SMTP_USER: z.string().optional(),
+		MAILER_SMTP_PASS: z.string().optional(),
+		/** From address for outbound mail, e.g. "Acme ID <noreply@acme.example>". */
+		MAILER_FROM: z.string().optional(),
 		/** Rate-limit counter storage. Use "database" for multi-instance deployments. */
 		RATE_LIMIT_STORAGE: z.enum(["memory", "database"]).default("memory"),
 		/** Comma-separated proxy IPs/CIDRs allowed to set forwarded-IP headers. */
@@ -58,14 +62,14 @@ if (
 	!process.env.SKIP_ENV_VALIDATION &&
 	!isProductionBuildPhase
 ) {
-	if (!env.MAILER_WEBHOOK_URL) {
+	if (!env.MAILER_SMTP_HOST || !env.MAILER_FROM) {
 		throw new Error(
-			"MAILER_WEBHOOK_URL is required in production; refusing to start without transactional email delivery.",
+			"MAILER_SMTP_HOST and MAILER_FROM are required in production; refusing to start without transactional email delivery.",
 		);
 	}
-	if (env.MAILER_WEBHOOK_URL && !env.MAILER_WEBHOOK_TOKEN) {
+	if (env.MAILER_SMTP_USER && !env.MAILER_SMTP_PASS) {
 		throw new Error(
-			"MAILER_WEBHOOK_TOKEN is required in production so the mail webhook receiver can authenticate this IdP.",
+			"MAILER_SMTP_PASS is required when MAILER_SMTP_USER is set.",
 		);
 	}
 	if (!env.BETTER_AUTH_URL.startsWith("https://")) {
