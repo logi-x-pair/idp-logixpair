@@ -85,6 +85,12 @@ const refreshed = await refreshTokenGrant(config, tokens.refresh_token!);
 
 Treat the authorization code, access token, refresh token, client secret, and PKCE verifier as secrets. Use secure, HTTP-only, same-site cookies for the RP session. Do not log callback URLs or token-bearing email links.
 
+## User-opt-in two-factor authentication
+
+Set `TWO_FACTOR_ENABLED=true` to expose TOTP enrollment, backup-code display, and account recovery controls. Enrollment is user-driven and requires the current password plus a first valid TOTP code. TOTP secrets and backup codes are encrypted at rest; backup codes are single-use. The server and client 2FA plugins remain mounted when the flag is false, so changing it back to false hides new enrollment but does not bypass an already-enrolled user's challenge. Disable 2FA from the authenticated account settings instead.
+
+During an OIDC login, Better Auth signs the `oauth_query` on the initial sign-in request. If the user needs 2FA, the client navigates to `/two-factor` while retaining the current query string. The OAuth client plugin signs and forwards that query on the TOTP or backup-code POST, allowing the provider to restore OAuth state and return the normal authorization callback after verification. Never replace this with a client-supplied redirect or an unsigned query.
+
 ## Resource-server verification
 
 Prefer local JWT verification for normal traffic. The resource server still derives issuer, audience, and JWKS URL from discovery/configuration; it does not invent endpoint paths. With the provider resource client:

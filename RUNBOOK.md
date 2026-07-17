@@ -112,6 +112,12 @@ After five failed attempts, the database-backed lockout applies exponential back
 
 Investigate credential stuffing by email and source IP. Do not manually clear a real user's row without identity verification and an incident record.
 
+## User two-factor enrollment and recovery
+
+`TWO_FACTOR_ENABLED=true` exposes opt-in TOTP enrollment in the authenticated account page. The server and client 2FA plugins remain mounted when the flag is false; setting it false hides new enrollment but does not bypass an already-enrolled user's challenge. Use the password-gated account disable flow to remove 2FA from an account. Never edit the encrypted `two_factor` secret or backup-code fields directly.
+
+The account lockout budget allows five failed TOTP/backup-code attempts and then applies the configured 15-minute lockout. A user can recover with one unused backup code after the lock expires, or an operator can follow the verified account-recovery process outside this application. Noninteractive CLI scripts refuse an enrolled admin's `twoFactorRedirect`; keep a dedicated non-2FA bootstrap operator for automation.
+
 ## Audit events
 
 The auth hook emits structured JSON for login, token issuance/revocation, client secret rotation, and consent grant/deny/revoke. Ship stdout to the production logging/SIEM pipeline. Audit records must not contain passwords, client secrets, tokens, authorization codes, or token-bearing email URLs.

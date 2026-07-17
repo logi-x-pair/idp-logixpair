@@ -12,7 +12,11 @@ cd <brand-idp>
 bun install
 ```
 
-The only source files that should change for brand identity are under `branding/`, plus deployment `.env` files.
+Brand-visible values live only under `branding/` and in deployment `.env` files. Application behavior, package names, and local infrastructure identifiers are deliberately shared across clones.
+
+### Non-brand internals (deliberately unchanged)
+
+Do not rename these solely for rebranding: `@krazil-idp/*` workspace package names, the Docker Compose project/container/volume names, `POSTGRES_DB`, and the disposable `krazil_idp_test` database name in `apps/web/scripts/setup-test-db.ts`. They are invisible to end users. Rename them only when multiple forks share a host, container registry, or database server and the infrastructure requires isolation.
 
 ## 2. Replace the brand
 
@@ -51,7 +55,9 @@ Set, at minimum:
 - `BETTER_AUTH_URL` to the public issuer origin.
 - `CORS_ORIGIN` to the same fullstack origin.
 - Token prefixes before the first production deployment.
-- `OAUTH_ADMIN_EMAILS`, `IDP_ADMIN_EMAIL`, and `IDP_ADMIN_PASSWORD` for the operator bootstrap.
+- `OAUTH_ADMIN_EMAILS`, `IDP_ADMIN_EMAIL`, and `IDP_ADMIN_PASSWORD` for the operator bootstrap; use a 12+ character admin password.
+- `REQUIRE_EMAIL_VERIFICATION` if unverified password sign-in must be blocked after verification mail is sent.
+- `TWO_FACTOR_ENABLED=true` to expose opt-in TOTP enrollment; the plugin remains mounted when false, so an already-enrolled account still requires 2FA.
 - `MAILER_WEBHOOK_URL` and optional `MAILER_WEBHOOK_TOKEN` for transactional email delivery.
 
 Never commit either `.env` file. Use a secret manager in production.
@@ -111,4 +117,5 @@ Constraint 9 is what keeps this merge path low-conflict: all brand-specific valu
 - [ ] `BETTER_AUTH_SECRET` and token prefixes are set and stored securely.
 - [ ] Operator is provisioned and client seed output is stored securely.
 - [ ] Discovery, JWKS, health, login, callback, logout, and a relying-party smoke test pass.
+- [ ] `REQUIRE_EMAIL_VERIFICATION` and `TWO_FACTOR_ENABLED` have intentional values documented; setting the 2FA flag false does not disable already-enrolled accounts.
 - [ ] `MAILER_WEBHOOK_URL` (and optional token) is configured; the production mailer fails closed when absent.

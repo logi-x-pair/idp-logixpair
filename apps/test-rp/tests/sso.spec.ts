@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { generateTotpCode } from "../totp";
 
 const email = process.env.TEST_RP_USER_EMAIL;
 const password = process.env.TEST_RP_USER_PASSWORD;
@@ -92,4 +93,84 @@ test("resource authorization follows mode after IdP session termination", async 
 	await expect(
 		page.getByRole("heading", { name: "Protected resource rejected" }),
 	).toBeVisible();
+});
+
+test("2FA preserves signed OAuth state through verification", async ({
+	page,
+}) => {
+	test.skip(
+		process.env.TWO_FACTOR_ENABLED !== "true",
+		"requires the dedicated enabled-mode 2FA fixture",
+	);
+	const twoFactorEmail = process.env.E2E_2FA_USER_EMAIL;
+	const twoFactorPassword = process.env.E2E_2FA_USER_PASSWORD;
+	const twoFactorSecret = process.env.E2E_2FA_TOTP_SECRET;
+	if (!twoFactorEmail || !twoFactorPassword || !twoFactorSecret) {
+		throw new Error("Enabled-mode 2FA fixture state is missing");
+	}
+
+	await page.goto("http://localhost:4101/");
+	await page.getByRole("link", { name: /Sign in with/ }).click();
+	await expect(page).toHaveURL(/localhost:3000\/sign-in/);
+	const initialSignInUrl = new URL(page.url());
+	expect(
+		initialSignInUrl.searchParams.get("oauth_query") ??
+			initialSignInUrl.searchParams.get("sig"),
+	).toBeTruthy();
+
+	await page.getByLabel("Email").fill(twoFactorEmail);
+	await page.getByLabel("Password").fill(twoFactorPassword);
+	await page.getByRole("button", { name: "Sign in" }).click();
+	await expect(page).toHaveURL(/localhost:3000\/two-factor/);
+	const challengeUrl = new URL(page.url());
+	expect(challengeUrl.search).toBe(initialSignInUrl.search);
+
+	const code = await generateTotpCode(twoFactorSecret);
+	const codeInput = page.getByLabel("Authenticator code");
+	const verifyButton = page.getByRole("button", { name: "Verify" });
+	await expect
+		.poll(async () => {
+			await codeInput.fill("");
+			await codeInput.pressSequentially(code);
+			return verifyButton.isEnabled();
+		})
+		.toBe(true);
+	await expect(verifyButton).toBeEnabled();
+	const [verifyRequest] = await Promise.all([
+		page.waitForRequest(
+			(request) =>
+				request.method() === "POST" &&
+				request.url().includes("/api/auth/two-factor/verify-totp"),
+		),
+		verifyButton.click(),
+	]);
+	const verifyBody = JSON.parse(verifyRequest.postData() ?? "{}") as {
+		oauth_query?: string;
+	};
+	expect(typeof verifyBody.oauth_query).toBe("string");
+
+	await expect(page).toHaveURL("http://localhost:4101/");
+	await expect(page.getByTestId("callback-proof")).toContainText("code=true");
+	await page.goto("http://localhost:3000/account");
+	await expect(
+		page.getByRole("heading", { name: "Two-step verification" }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("button", { name: "Disable two-step verification" }),
+	).toBeVisible();
+
+	let sawLoginFormOnRp2 = false;
+	page.on("framenavigated", (frame) => {
+		if (
+			frame === page.mainFrame() &&
+			frame.url().includes("localhost:3000/sign-in")
+		) {
+			sawLoginFormOnRp2 = true;
+		}
+	});
+	await page.goto("http://localhost:4102/");
+	await page.getByRole("link", { name: /Sign in with/ }).click();
+	await expect(page).toHaveURL("http://localhost:4102/");
+	await expect(page.getByTestId("callback-proof")).toContainText("code=true");
+	expect(sawLoginFormOnRp2).toBe(false);
 });

@@ -53,6 +53,8 @@ curl -i http://localhost:3000/api/auth/ok
 `apps/web/.env.example` is the complete application variable list:
 
 - `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `CORS_ORIGIN`.
+- `REQUIRE_EMAIL_VERIFICATION` sends verification mail on signup and, when true, blocks unverified password sign-in.
+- `TWO_FACTOR_ENABLED` controls only whether opt-in TOTP/backup-code enrollment UI is exposed. The two-factor server/client plugins are always mounted; setting this flag false does not bypass an already-enrolled account's challenge.
 - `SEED_USER_NAME`, `SEED_USER_EMAIL`, `SEED_USER_PASSWORD` for local-only test data.
 - `IDP_ADMIN_EMAIL`, `IDP_ADMIN_PASSWORD`, `OAUTH_ADMIN_EMAILS` for explicit operator provisioning.
 - `OAUTH_VALID_AUDIENCES` for resource-server audiences.
@@ -82,10 +84,10 @@ bun --cwd apps/web run revoke-token <jwt_access_token>
 
 `seed:admin` is deliberate and proves password ownership before assigning the server-only `admin` role. Public signup cannot set that role. `seed:clients` is idempotent by client name and prints a new client secret only at creation/rotation; store it immediately.
 
-The OAuth Provider schema is generated from the installed auth config with the version-matched CLI:
-
 ```bash
-bunx auth@1.6.23 generate --config packages/auth/src/index.ts --output packages/db/src/schema/auth.ts
+bun --cwd apps/web x auth@1.6.23 generate \
+	--config ../../packages/auth/src/index.ts \
+	--output ../../packages/db/src/schema/auth.ts --yes
 ```
 
 ## OAuth/OIDC endpoints
@@ -141,10 +143,19 @@ never changes an existing user's password. Playwright starts the IdP and both
 RP servers automatically. PostgreSQL must be running and the schema applied
 first. See `INTEGRATION.md` for the flow and `RUNBOOK.md` for operations.
 
+To exercise the opt-in 2FA continuation fixture, use a dedicated localhost database/account password of at least 12 characters and run:
+
+```bash
+TWO_FACTOR_ENABLED=true bun --cwd apps/test-rp run test:e2e
+```
+
+Enabled mode provisions a fresh disposable 2FA account, preserves the signed `oauth_query` through `/two-factor`, and proves RP1 and RP2 callbacks without another credential prompt. The default command keeps 2FA enrollment UI hidden and runs the existing smoke tests.
+
 ## Production notes
 
 - HTTPS is mandatory in production. HSTS is emitted only when `NODE_ENV=production`.
 - Better Auth global/per-endpoint rate limiting is enabled; OAuth endpoint defaults are per-IP and documented in the plugin source/docs.
+- The installed skill set is locked in `skills-lock.json`, including Better Auth core/security/email-password, TOTP/backup-code 2FA, and organization guidance. 2FA is single-tenant, user opt-in; organization/multi-tenant RBAC is not implied by this template.
 
 Token lifetimes are explicit in `packages/auth/src/token-config.ts`: the
 `short-lived` authorization-code mode uses 10 minutes, `hybrid` and

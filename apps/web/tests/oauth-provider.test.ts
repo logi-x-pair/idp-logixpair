@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { auth } from "@krazil-idp/auth";
+import { type MailMessage, mailer } from "@krazil-idp/auth/email";
 import { LOCKOUT } from "@krazil-idp/auth/token-config";
+import { branding } from "@krazil-idp/branding/config";
 import { db } from "@krazil-idp/db";
 import {
 	oauthClient,
@@ -10,6 +12,7 @@ import {
 } from "@krazil-idp/db/schema/auth";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
 import { revokedToken } from "@krazil-idp/db/schema/revocation";
+import { env } from "@krazil-idp/env/server";
 import { eq } from "drizzle-orm";
 
 const issuer = "http://localhost:3000/api/auth";
@@ -145,6 +148,65 @@ async function revokedRows(jti: string) {
 		.where(eq(revokedToken.jti, jti));
 }
 
+function headersFromSetCookie(headers: Headers): Headers {
+	return new Headers({
+		cookie: headers
+			.getSetCookie()
+			.map((cookie) => cookie.split(";")[0])
+			.join("; "),
+	});
+}
+
+async function captureAudit<T>(operation: () => Promise<T>) {
+	const lines: string[] = [];
+	const originalLog = console.log;
+	console.log = (...args: unknown[]) => {
+		lines.push(args.map(String).join(" "));
+	};
+	try {
+		return { result: await operation(), lines };
+	} finally {
+		console.log = originalLog;
+	}
+}
+
+async function captureMail<T>(operation: () => Promise<T>) {
+	const messages: MailMessage[] = [];
+	const originalSend = mailer.send;
+	mailer.send = async (message) => {
+		messages.push(message);
+	};
+	try {
+		return { result: await operation(), messages };
+	} finally {
+		mailer.send = originalSend;
+	}
+}
+
+function decodeBase32Secret(encoded: string): string {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+	let buffer = 0;
+	let bitCount = 0;
+	const bytes: number[] = [];
+	for (const character of encoded.replace(/=+$/, "").toUpperCase()) {
+		const value = alphabet.indexOf(character);
+		if (value < 0) throw new Error("Invalid Base32 TOTP secret");
+		buffer = (buffer << 5) | value;
+		bitCount += 5;
+		while (bitCount >= 8) {
+			bitCount -= 8;
+			bytes.push((buffer >> bitCount) & 0xff);
+			buffer &= bitCount === 0 ? 0 : (1 << bitCount) - 1;
+		}
+	}
+	return new TextDecoder().decode(Uint8Array.from(bytes));
+}
+
+async function currentTotpCode(secret: string): Promise<string> {
+	const generated = await auth.api.generateTOTP({ body: { secret } });
+	return generated.code;
+}
+
 beforeAll(async () => {
 	if (!adminPassword)
 		throw new Error(
@@ -167,7 +229,10 @@ beforeAll(async () => {
 		.where(eq(user.email, adminEmail));
 	expect(account.length).toBe(1);
 	userId = account[0].id;
-	await db.update(user).set({ role: "admin" }).where(eq(user.id, userId));
+	await db
+		.update(user)
+		.set({ role: "admin", emailVerified: true })
+		.where(eq(user.id, userId));
 
 	const signedIn = await auth.api.signInEmail({
 		body: { email: adminEmail, password: adminPassword },
@@ -197,6 +262,89 @@ beforeAll(async () => {
 });
 
 describe("OAuth 2.1 provider contract", () => {
+	test("signup sends branded verification mail and optional enforcement works", async () => {
+		const email = `verify-${Date.now()}@example.com`;
+		const password = `${adminPassword} verify-test`;
+		const captured = await captureMail(() =>
+			auth.api.signUpEmail({
+				body: { name: "Verification Test", email, password },
+			}),
+		);
+		const [created] = await db
+			.select({ emailVerified: user.emailVerified })
+			.from(user)
+			.where(eq(user.email, email));
+		expect(created.emailVerified).toBe(false);
+		expect(captured.messages).toHaveLength(1);
+		expect(captured.messages[0]).toMatchObject({
+			to: email,
+			subject: `Verify your ${branding.brandName} email address`,
+		});
+		expect(captured.messages[0].text).toContain("http");
+
+		if (env.REQUIRE_EMAIL_VERIFICATION === "true") {
+			const enforced = await captureMail(async () => {
+				try {
+					await auth.api.signInEmail({ body: { email, password } });
+					return false;
+				} catch {
+					return true;
+				}
+			});
+			expect(enforced.result).toBe(true);
+			expect(enforced.messages).toHaveLength(1);
+		} else {
+			await auth.api.signInEmail({ body: { email, password } });
+		}
+	});
+
+	test("password reset revokes sessions and emits an audit event", async () => {
+		const email = `reset-${Date.now()}@example.com`;
+		const password = `${adminPassword} reset-test`;
+		await auth.api.signUpEmail({
+			body: { name: "Reset Test", email, password },
+		});
+		await db
+			.update(user)
+			.set({ emailVerified: true })
+			.where(eq(user.email, email));
+		await auth.api.signInEmail({ body: { email, password } });
+		await auth.api.signInEmail({ body: { email, password } });
+		const requested = await captureMail(() =>
+			auth.api.requestPasswordReset({
+				body: { email, redirectTo: "http://localhost:3000/reset-password" },
+			}),
+		);
+		expect(requested.messages).toHaveLength(1);
+		const url = requested.messages[0].text.slice(
+			requested.messages[0].text.indexOf("http"),
+		);
+		const token = new URL(url).pathname.split("/").at(-1);
+		expect(token).toBeString();
+		const reset = await captureAudit(() =>
+			auth.api.resetPassword({
+				body: { newPassword: `${password} changed` },
+				query: { token: token as string },
+			}),
+		);
+		expect(
+			reset.lines.some((line) => line.includes('"event":"password.reset"')),
+		).toBe(true);
+		const resetUser = await db
+			.select({ id: user.id })
+			.from(user)
+			.where(eq(user.email, email));
+		expect(resetUser).toHaveLength(1);
+		expect(
+			await db
+				.select()
+				.from(session)
+				.where(eq(session.userId, resetUser[0].id)),
+		).toHaveLength(0);
+		await auth.api.signInEmail({
+			body: { email, password: `${password} changed` },
+		});
+	});
 	testRevocationStatus(
 		"authoritative status rejects a terminated session",
 		async () => {
@@ -638,5 +786,103 @@ describe("OAuth 2.1 provider contract", () => {
 		);
 		expect(introspect.status).toBe(200);
 		expect((await introspect.json()).active).toBe(false);
+	});
+	test("2FA preserves audit truth and remains enforced when enrollment is hidden", async () => {
+		const email = `two-factor-${Date.now()}@example.com`;
+		const password = `${adminPassword} 2fa-test`;
+		await auth.api.signUpEmail({
+			body: { name: "Two Factor Test", email, password },
+		});
+		await db
+			.update(user)
+			.set({ emailVerified: true })
+			.where(eq(user.email, email));
+		const account = await db
+			.select({ id: user.id })
+			.from(user)
+			.where(eq(user.email, email));
+		expect(account).toHaveLength(1);
+		const userId = account[0].id;
+		const signedIn = await auth.api.signInEmail({
+			body: { email, password },
+			returnHeaders: true,
+		});
+		const sessionHeaders = headersFromSetCookie(signedIn.headers);
+		const setup = await auth.api.enableTwoFactor({
+			headers: sessionHeaders,
+			body: { password },
+		});
+		const encodedSecret = new URL(setup.totpURI).searchParams.get("secret");
+		expect(encodedSecret).toBeString();
+		const secret = decodeBase32Secret(encodedSecret as string);
+		await auth.api.verifyTOTP({
+			headers: sessionHeaders,
+			body: { code: await currentTotpCode(secret as string) },
+		});
+		const [enrolledUser] = await db
+			.select({ twoFactorEnabled: user.twoFactorEnabled })
+			.from(user)
+			.where(eq(user.id, userId));
+		expect(enrolledUser.twoFactorEnabled).toBe(true);
+		await db.delete(session).where(eq(session.userId, userId));
+
+		const challenge = await captureAudit(() =>
+			auth.api.signInEmail({ body: { email, password }, returnHeaders: true }),
+		);
+		expect(challenge.result.response?.twoFactorRedirect).toBe(true);
+		expect(
+			challenge.lines.some((line) => line.includes('"event":"login.success"')),
+		).toBe(false);
+		expect(
+			await db.select().from(loginAttempt).where(eq(loginAttempt.email, email)),
+		).toHaveLength(0);
+
+		const challengeHeaders = headersFromSetCookie(challenge.result.headers);
+		const completed = await captureAudit(async () =>
+			auth.api.verifyTOTP({
+				headers: challengeHeaders,
+				body: { code: await currentTotpCode(secret as string) },
+				returnHeaders: true,
+			}),
+		);
+		expect(completed.result.response?.user.email).toBe(email);
+		expect(
+			completed.lines.filter((line) =>
+				line.includes('"event":"login.success"'),
+			),
+		).toHaveLength(1);
+
+		const authenticatedHeaders = headersFromSetCookie(completed.result.headers);
+		const backup = await auth.api.generateBackupCodes({
+			headers: authenticatedHeaders,
+			body: { password },
+		});
+		const backupCode = backup.backupCodes[0];
+		const authenticatedVerification = await captureAudit(() =>
+			auth.api.verifyBackupCode({
+				headers: authenticatedHeaders,
+				body: { code: backupCode },
+			}),
+		);
+		expect(
+			authenticatedVerification.lines.some((line) =>
+				line.includes('"event":"login.success"'),
+			),
+		).toBe(false);
+		await expect(
+			auth.api.verifyBackupCode({
+				headers: authenticatedHeaders,
+				body: { code: backupCode },
+			}),
+		).rejects.toThrow();
+		await auth.api.disableTwoFactor({
+			headers: authenticatedHeaders,
+			body: { password },
+		});
+		const [updated] = await db
+			.select({ twoFactorEnabled: user.twoFactorEnabled })
+			.from(user)
+			.where(eq(user.id, userId));
+		expect(updated.twoFactorEnabled).toBe(false);
 	});
 });
