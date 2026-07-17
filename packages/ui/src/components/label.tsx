@@ -5,6 +5,7 @@ import type * as React from "react";
 
 function Label({ className, ...props }: React.ComponentProps<"label">) {
 	return (
+		// biome-ignore lint/a11y/noLabelWithoutControl: passthrough primitive; htmlFor and text content are supplied by consumers via {...props}
 		<label
 			data-slot="label"
 			className={cn(

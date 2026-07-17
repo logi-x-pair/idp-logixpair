@@ -9,6 +9,7 @@ import type * as React from "react";
 
 function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: role="group" is correct for a generic input-group wrapper; <fieldset> would impose form-group semantics and chrome
 		<div
 			data-slot="input-group"
 			role="group"
@@ -53,6 +54,8 @@ function InputGroupAddon({
 	...props
 }: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
 	return (
+		// biome-ignore lint/a11y/useKeyWithClickEvents: onClick only forwards focus to the already keyboard-accessible input (mouse convenience, not a primary control)
+		// biome-ignore lint/a11y/useSemanticElements: role="group" is correct for a generic addon wrapper; <fieldset> would impose form-group semantics
 		<div
 			role="group"
 			data-slot="input-group-addon"
