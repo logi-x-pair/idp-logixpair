@@ -1,12 +1,13 @@
 import { relations } from "drizzle-orm";
 import {
+	bigint,
+	boolean,
+	index,
+	integer,
+	jsonb,
 	pgTable,
 	text,
 	timestamp,
-	boolean,
-	integer,
-	jsonb,
-	index,
 } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
@@ -316,3 +317,16 @@ export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
 		references: [user.id],
 	}),
 }));
+
+/**
+ * Better Auth rate-limit counters. Used only when RATE_LIMIT_STORAGE=database;
+ * with the default "memory" storage this table stays empty. The model name
+ * `rateLimit` must match Better Auth's expected model so the drizzle adapter
+ * resolves it automatically.
+ */
+export const rateLimit = pgTable("rate_limit", {
+	id: text("id").primaryKey(),
+	key: text("key").notNull().unique(),
+	count: integer("count").notNull(),
+	lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});

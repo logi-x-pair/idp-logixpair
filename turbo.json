@@ -27,6 +27,9 @@
 			"cache": false,
 			"persistent": true
 		},
+		"db:baseline": {
+			"cache": false
+		},
 		"db:studio": {
 			"cache": false,
 			"persistent": true

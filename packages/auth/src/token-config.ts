@@ -10,11 +10,11 @@ export const TOKEN_LIFETIMES = {
 	/** Machine-to-machine access tokens (client_credentials grant). */
 	m2mAccessTokenSeconds: 60 * 60, // 1h (plugin default)
 	/** OIDC id_tokens. */
-	idTokenSeconds: 10 * 60 * 60, // 10h (plugin default)
+	idTokenSeconds: 60 * 60, // 1h — point-in-time authentication assertion
 	/** Refresh tokens (rotated on every use). */
 	refreshTokenSeconds: 30 * 24 * 60 * 60, // 30d (plugin default)
 	/** Authorization codes. */
-	codeSeconds: 10 * 60, // 10m (plugin default)
+	codeSeconds: 60, // 60s — codes are one-shot; short window per OAuth 2.1 guidance
 } as const;
 
 /**

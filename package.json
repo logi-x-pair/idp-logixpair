@@ -33,6 +33,7 @@
 		"db:studio": "turbo run db:studio -F @krazil-idp/db",
 		"db:generate": "turbo run db:generate -F @krazil-idp/db",
 		"db:migrate": "turbo run db:migrate -F @krazil-idp/db",
+		"db:baseline": "turbo run db:baseline -F @krazil-idp/db",
 		"db:start": "turbo run db:start -F @krazil-idp/db",
 		"db:watch": "turbo run db:watch -F @krazil-idp/db",
 		"db:stop": "turbo run db:stop -F @krazil-idp/db",

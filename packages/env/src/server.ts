@@ -39,6 +39,10 @@ export const env = createEnv({
 		/** Provider-neutral transactional email webhook (required in production). */
 		MAILER_WEBHOOK_URL: z.url().optional(),
 		MAILER_WEBHOOK_TOKEN: z.string().optional(),
+		/** Rate-limit counter storage. Use "database" for multi-instance deployments. */
+		RATE_LIMIT_STORAGE: z.enum(["memory", "database"]).default("memory"),
+		/** Comma-separated proxy IPs/CIDRs allowed to set forwarded-IP headers. */
+		TRUSTED_PROXIES: z.string().optional(),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,
@@ -59,7 +63,29 @@ if (
 			"MAILER_WEBHOOK_URL is required in production; refusing to start without transactional email delivery.",
 		);
 	}
+	if (env.MAILER_WEBHOOK_URL && !env.MAILER_WEBHOOK_TOKEN) {
+		throw new Error(
+			"MAILER_WEBHOOK_TOKEN is required in production so the mail webhook receiver can authenticate this IdP.",
+		);
+	}
 	if (!env.BETTER_AUTH_URL.startsWith("https://")) {
 		throw new Error("BETTER_AUTH_URL must use HTTPS in production.");
 	}
+	if (env.RATE_LIMIT_STORAGE !== "database") {
+		console.warn(
+			"[env] RATE_LIMIT_STORAGE=memory: rate-limit counters reset on restart and are per-instance. Set RATE_LIMIT_STORAGE=database before scaling beyond one instance.",
+		);
+	}
+}
+
+// Runtime misconfiguration warning: SKIP_ENV_VALIDATION disables the schema AND
+// the production guards above, so it must never be left set at production runtime.
+if (
+	process.env.SKIP_ENV_VALIDATION &&
+	process.env.NODE_ENV === "production" &&
+	!isProductionBuildPhase
+) {
+	console.warn(
+		"[env] SKIP_ENV_VALIDATION is set at production runtime: schema validation AND production safety guards are disabled. Unset it — it is intended for builds only.",
+	);
 }

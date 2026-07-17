@@ -63,6 +63,15 @@ export function createAuth() {
 		advanced: {
 			ipAddress: {
 				ipAddressHeaders: [...IP_ADDRESS_HEADERS],
+				// Validate the forwarded chain against known proxy hops when set;
+				// otherwise the first x-forwarded-for value is trusted blindly.
+				...(env.TRUSTED_PROXIES
+					? {
+							trustedProxies: env.TRUSTED_PROXIES.split(",")
+								.map((p) => p.trim())
+								.filter(Boolean),
+						}
+					: {}),
 			},
 		},
 		emailAndPassword: {
@@ -103,11 +112,12 @@ export function createAuth() {
 		disabledPaths: ["/token"],
 		// Global rate limiting: enabled automatically in production (per-IP).
 		// The OAuth provider plugin layers stricter per-endpoint limits on top
-		// (documented in README.md). Memory storage assumes one instance per
-		// deployment; switch to database storage for horizontal scaling.
+		// (documented in README.md). Counter storage follows RATE_LIMIT_STORAGE:
+		// "memory" (default, single-instance) or "database" (multi-instance).
 		rateLimit: {
 			window: 60,
 			max: 100,
+			storage: env.RATE_LIMIT_STORAGE,
 		},
 		hooks: {
 			// Temporary lockout with exponential backoff after repeated failures.
