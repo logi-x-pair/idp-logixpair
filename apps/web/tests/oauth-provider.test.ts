@@ -445,24 +445,48 @@ describe("OAuth 2.1 provider contract", () => {
 		},
 	);
 
-	test("unknown-email failures do not create lockout rows", async () => {
-		const email = `missing-${Date.now()}@example.com`;
-		const response = await auth.handler(
-			new Request(`${issuer}/sign-in/email`, {
-				method: "POST",
-				headers: {
-					"content-type": "application/json",
-					origin: "http://localhost:3000",
-				},
-				body: JSON.stringify({ email, password: "wrong-password" }),
-			}),
-		);
-		expect([400, 401]).toContain(response.status);
-		const rows = await db
-			.select({ email: loginAttempt.email })
-			.from(loginAttempt)
-			.where(eq(loginAttempt.email, email));
-		expect(rows).toHaveLength(0);
+	test("unknown-email lockout is indistinguishable from a real account", async () => {
+		const missingEmail = `missing-${Date.now()}@example.com`;
+		const failedSignIn = (email: string) =>
+			auth.handler(
+				new Request(`${issuer}/sign-in/email`, {
+					method: "POST",
+					headers: {
+						"content-type": "application/json",
+						origin: "http://localhost:3000",
+					},
+					body: JSON.stringify({ email, password: "wrong-password" }),
+				}),
+			);
+		try {
+			for (let i = 0; i < LOCKOUT.maxFailedAttempts; i++) {
+				const response = await failedSignIn(missingEmail);
+				expect([400, 401]).toContain(response.status);
+			}
+			const lockedUnknown = await failedSignIn(missingEmail);
+			expect(lockedUnknown.status).toBe(429);
+			expect(lockedUnknown.headers.get("x-retry-after")).toBeTruthy();
+			const unknownBody = (await lockedUnknown.json()) as {
+				message?: string;
+			};
+			expect(unknownBody.message).toBe(
+				"Too many requests. Please try again later.",
+			);
+
+			await db.delete(loginAttempt).where(eq(loginAttempt.email, adminEmail));
+			for (let i = 0; i < LOCKOUT.maxFailedAttempts; i++) {
+				const response = await failedSignIn(adminEmail);
+				expect([400, 401]).toContain(response.status);
+			}
+			const lockedKnown = await failedSignIn(adminEmail);
+			expect(lockedKnown.status).toBe(429);
+			expect(lockedKnown.headers.get("x-retry-after")).toBeTruthy();
+			// The parity assertion: byte-identical bodies for both cases.
+			expect(await lockedKnown.json()).toEqual(unknownBody);
+		} finally {
+			await db.delete(loginAttempt).where(eq(loginAttempt.email, missingEmail));
+			await db.delete(loginAttempt).where(eq(loginAttempt.email, adminEmail));
+		}
 	});
 
 	test("concurrent failures atomically reach the lockout threshold", async () => {
@@ -838,6 +862,19 @@ describe("OAuth 2.1 provider contract", () => {
 		).toHaveLength(0);
 
 		const challengeHeaders = headersFromSetCookie(challenge.result.headers);
+		const wrongCode = String(
+			(Number(await currentTotpCode(secret as string)) + 1) % 1_000_000,
+		).padStart(6, "0");
+		const failedVerification = await captureAudit(async () =>
+			auth.api
+				.verifyTOTP({ headers: challengeHeaders, body: { code: wrongCode } })
+				.catch(() => null),
+		);
+		expect(
+			failedVerification.lines.filter((line) =>
+				line.includes('"event":"login.two_factor_failure"'),
+			),
+		).toHaveLength(1);
 		const completed = await captureAudit(async () =>
 			auth.api.verifyTOTP({
 				headers: challengeHeaders,
@@ -884,5 +921,24 @@ describe("OAuth 2.1 provider contract", () => {
 			.from(user)
 			.where(eq(user.id, userId));
 		expect(updated.twoFactorEnabled).toBe(false);
+	});
+	test("admin client creation is audited", async () => {
+		const created = await captureAudit(() =>
+			auth.api.adminCreateOAuthClient({
+				headers: adminHeaders,
+				body: {
+					client_name: `Audit Client ${Date.now()}`,
+					redirect_uris: [callback],
+				},
+			}),
+		);
+		expect(created.result.client_id).toBeString();
+		expect(
+			created.lines.filter(
+				(line) =>
+					line.includes('"event":"client.created"') &&
+					line.includes(created.result.client_id),
+			),
+		).toHaveLength(1);
 	});
 });

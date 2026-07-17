@@ -1,5 +1,4 @@
 import { db } from "@krazil-idp/db";
-import { user } from "@krazil-idp/db/schema/auth";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
 import { env } from "@krazil-idp/env/server";
 import { APIError, type BetterAuthPlugin } from "better-auth";
@@ -16,8 +15,17 @@ import {
 } from "./jwt-revocation";
 import { LOCKOUT } from "./token-config";
 
+/**
+ * Single source of truth for the trusted client-IP header. index.ts feeds the
+ * same list to better-auth's advanced.ipAddress config so audit records and
+ * rate limiting can never drift apart.
+ */
+export const IP_ADDRESS_HEADERS = ["x-forwarded-for"] as const;
+
 function clientIp(headers: Headers | undefined): string | undefined {
-	return headers?.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined;
+	return (
+		headers?.get(IP_ADDRESS_HEADERS[0])?.split(",")[0]?.trim() ?? undefined
+	);
 }
 
 function authenticatedClientId(
@@ -60,9 +68,17 @@ export const lockoutGuard = createAuthMiddleware(async (ctx) => {
 	const row = rows[0];
 	if (row?.lockedUntil && row.lockedUntil > new Date()) {
 		audit("login.locked_out", { email, ip: clientIp(ctx.headers) });
-		throw new APIError("TOO_MANY_REQUESTS", {
-			message: "Too many failed attempts. Try again later.",
-		});
+		const retryAfter = Math.max(
+			1,
+			Math.ceil((row.lockedUntil.getTime() - Date.now()) / 1000),
+		);
+		// Byte-identical to better-auth's built-in rate-limit response so a
+		// locked account is indistinguishable from ordinary throttling.
+		throw new APIError(
+			"TOO_MANY_REQUESTS",
+			{ message: "Too many requests. Please try again later." },
+			{ "X-Retry-After": String(retryAfter) },
+		);
 	}
 });
 
@@ -74,11 +90,16 @@ async function recordLoginOutcome(
 		await db.delete(loginAttempt).where(eq(loginAttempt.email, email));
 		return;
 	}
-	const existingUser = await db
-		.select({ id: user.id })
-		.from(user)
-		.where(eq(user.email, email));
-	if (existingUser.length === 0) return;
+	// Track unknown emails identically to real accounts: skipping them would
+	// let an attacker distinguish registered addresses by lockout behavior.
+	// Length/format guard keeps garbage keys out of the table.
+	if (email.length > 254 || !email.includes("@")) return;
+	// Opportunistic pruning bounds unknown-email rows (max lock is 1h; 24h
+	// idle retention preserves backoff history for active attacks).
+	await db.delete(loginAttempt).where(
+		sql`${loginAttempt.updatedAt} < now() - interval '24 hours'
+				AND (${loginAttempt.lockedUntil} IS NULL OR ${loginAttempt.lockedUntil} < now())`,
+	);
 	await db
 		.insert(loginAttempt)
 		.values({
@@ -138,7 +159,16 @@ export const auditHook = createAuthMiddleware(async (ctx) => {
 		}
 		case "/two-factor/verify-totp":
 		case "/two-factor/verify-backup-code": {
-			if (failed) return;
+			if (failed) {
+				// Never log the submitted code; ip + factor is enough to spot
+				// brute-force attempts against a challenged account.
+				audit("login.two_factor_failure", {
+					ip,
+					factor:
+						ctx.path === "/two-factor/verify-totp" ? "totp" : "backup-code",
+				});
+				return;
+			}
 			const incomingSession = await ctx.getSignedCookie(
 				ctx.context.authCookies.sessionToken.name,
 				ctx.context.secret,
@@ -220,6 +250,36 @@ export const auditHook = createAuthMiddleware(async (ctx) => {
 		case "/oauth2/client/rotate-secret": {
 			if (failed) return;
 			audit("client.secret_rotated", { clientId: ctx.body?.client_id, ip });
+			return;
+		}
+		case "/admin/oauth2/create-client":
+		case "/oauth2/create-client": {
+			if (failed) return;
+			const created = returned as { client_id?: string } | undefined;
+			audit("client.created", {
+				clientId: created?.client_id,
+				userId: ctx.context.session?.user.id,
+				ip,
+			});
+			return;
+		}
+		case "/admin/oauth2/update-client":
+		case "/oauth2/update-client": {
+			if (failed) return;
+			audit("client.updated", {
+				clientId: ctx.body?.client_id,
+				userId: ctx.context.session?.user.id,
+				ip,
+			});
+			return;
+		}
+		case "/oauth2/delete-client": {
+			if (failed) return;
+			audit("client.deleted", {
+				clientId: ctx.body?.client_id,
+				userId: ctx.context.session?.user.id,
+				ip,
+			});
 			return;
 		}
 		case "/oauth2/consent": {

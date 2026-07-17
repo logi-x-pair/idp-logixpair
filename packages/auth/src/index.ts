@@ -10,7 +10,11 @@ import { jwt } from "better-auth/plugins/jwt";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { audit } from "./audit";
 import { mailer, resetPasswordEmail, verificationEmail } from "./email";
-import { lockoutGuard, securityAuditPlugin } from "./guards";
+import {
+	IP_ADDRESS_HEADERS,
+	lockoutGuard,
+	securityAuditPlugin,
+} from "./guards";
 import { revocationStatus } from "./revocation-status";
 import { SCOPE_EXPIRATIONS, TOKEN_LIFETIMES } from "./token-config";
 
@@ -58,7 +62,7 @@ export function createAuth() {
 		// client values and writes its own canonical forwarding chain.
 		advanced: {
 			ipAddress: {
-				ipAddressHeaders: ["x-forwarded-for"],
+				ipAddressHeaders: [...IP_ADDRESS_HEADERS],
 			},
 		},
 		emailAndPassword: {
