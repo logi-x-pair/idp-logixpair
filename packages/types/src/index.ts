@@ -220,6 +220,35 @@ function optionalString(
 	return requireString(claims, claim, token);
 }
 
+function optionalNumber(
+	claims: Record<string, unknown>,
+	claim: string,
+	token: string,
+): void {
+	if (claims[claim] === undefined) return;
+	requireNumber(claims, claim, token);
+}
+
+function optionalBoolean(
+	claims: Record<string, unknown>,
+	claim: string,
+	token: string,
+): void {
+	const value = claims[claim];
+	if (value !== undefined && typeof value !== "boolean") {
+		throw new TypeError(`${token} claim "${claim}" must be a boolean`);
+	}
+}
+
+/** Optional claims gated by the `profile` and `email` scopes. */
+const SCOPE_GATED_STRING_CLAIMS = [
+	"name",
+	"picture",
+	"given_name",
+	"family_name",
+	"email",
+] as const;
+
 function isStringArray(value: unknown): value is string[] {
 	return Array.isArray(value) && value.every((v) => typeof v === "string");
 }
@@ -261,6 +290,14 @@ export function parseIdTokenClaims(payload: unknown): IdTokenClaims {
 	requireString(claims, "aud", "ID token");
 	requireNumber(claims, "iat", "ID token");
 	requireNumber(claims, "exp", "ID token");
+	optionalString(claims, "acr", "ID token");
+	optionalString(claims, "nonce", "ID token");
+	optionalString(claims, "sid", "ID token");
+	optionalNumber(claims, "auth_time", "ID token");
+	for (const claim of SCOPE_GATED_STRING_CLAIMS) {
+		optionalString(claims, claim, "ID token");
+	}
+	optionalBoolean(claims, "email_verified", "ID token");
 	return claims as unknown as IdTokenClaims;
 }
 
@@ -268,6 +305,10 @@ export function parseIdTokenClaims(payload: unknown): IdTokenClaims {
 export function parseUserInfo(payload: unknown): UserInfoResponse {
 	const claims = asClaimRecord(payload, "UserInfo");
 	requireString(claims, "sub", "UserInfo");
+	for (const claim of SCOPE_GATED_STRING_CLAIMS) {
+		optionalString(claims, claim, "UserInfo");
+	}
+	optionalBoolean(claims, "email_verified", "UserInfo");
 	return claims as unknown as UserInfoResponse;
 }
 
