@@ -27,7 +27,9 @@
 			"!**/wrangler.jsonc",
 			"!**/.source",
 			"!**/convex/_generated",
-			"!**/src/migrations/meta"
+			"!**/src/migrations/meta",
+			"!**/test-results",
+			"!**/playwright-report"
 		]
 	},
 	"formatter": {
@@ -38,7 +40,7 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true,
+			"preset": "recommended",
 			"correctness": {
 				"useExhaustiveDependencies": "info"
 			},
