@@ -53,3 +53,9 @@ coverage
 .cache
 tmp
 temp
+
+# Agent tooling and scraped reference docs (local only, not part of the template)
+.agents/
+.docs/
+skills-lock.json
+idp-harness-prompt.md

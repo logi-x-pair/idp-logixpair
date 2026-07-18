@@ -176,7 +176,7 @@ Enabled mode provisions a fresh disposable 2FA account, preserves the signed `oa
 
 - HTTPS is mandatory in production. HSTS is emitted only when `NODE_ENV=production`.
 - Better Auth global/per-endpoint rate limiting is enabled; OAuth endpoint defaults are per-IP and documented in the plugin source/docs.
-- The installed skill set is locked in `skills-lock.json`, including Better Auth core/security/email-password, TOTP/backup-code 2FA, and organization guidance. 2FA is single-tenant, user opt-in; organization/multi-tenant RBAC is not implied by this template.
+- 2FA is single-tenant, user opt-in (TOTP + backup codes); organization/multi-tenant RBAC is not implied by this template.
 - Rate-limit counters default to in-memory storage (`RATE_LIMIT_STORAGE=memory`), correct for a single instance. Set `RATE_LIMIT_STORAGE=database` before running more than one instance; the `rate_limit` table ships in migration `0003`. Production logs a warning while memory storage is active.
 - Set `TRUSTED_PROXIES` to your reverse proxies' IPs/CIDRs so Better Auth only trusts `x-forwarded-for` values written by those hops. Leave it empty only when the proxy strips inbound forwarding headers.
 - Production Content-Security-Policy is nonce-based and set per-request in `apps/web/src/proxy.ts` (`script-src 'self' 'nonce-…' 'strict-dynamic'`, no `'unsafe-inline'`). Development keeps a relaxed static CSP in `next.config.ts` for HMR.
