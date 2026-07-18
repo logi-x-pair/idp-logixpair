@@ -1,53 +1,53 @@
 {
-  "version": 1,
-  "skills": {
-    "better-auth-best-practices": {
-      "source": "better-auth/skills",
-      "sourceType": "github",
-      "skillPath": "better-auth/best-practices/SKILL.md",
-      "computedHash": "61ba0ef64ed2e7c424401cc848ca33dd6d790a720c44727717dc0c5cba5fc122"
-    },
-    "better-auth-security-best-practices": {
-      "source": "better-auth/skills",
-      "sourceType": "github",
-      "skillPath": "security/SKILL.md",
-      "computedHash": "7a230edf3a24ce18162cb4379f59b6a19b8d24ca04db530609d0f15cede556dc"
-    },
-    "email-and-password-best-practices": {
-      "source": "better-auth/skills",
-      "sourceType": "github",
-      "skillPath": "better-auth/emailAndPassword/SKILL.md",
-      "computedHash": "747d7f73bd9e2ec5317b8ef88dc70f97df716d00e3d02de4051feebaa48b062d"
-    },
-    "find-skills": {
-      "source": "vercel-labs/skills",
-      "sourceType": "github",
-      "skillPath": "skills/find-skills/SKILL.md",
-      "computedHash": "781bd6d3f9b19f8c9af6b53d8d0e4876d0183841b565db34ca7092ffa412d111"
-    },
-    "frontend-design": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "skillPath": "skills/frontend-design/SKILL.md",
-      "computedHash": "4eabc66183767153e404b39d1b839b1c37f2d82d86f0a0d7e880a579d8d62336"
-    },
-    "improve-codebase-architecture": {
-      "source": "mattpocock/skills",
-      "sourceType": "github",
-      "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
-      "computedHash": "66e8a50c83c3c724fcfe0769701b665c56cec220cc4f49cc1aee8bdfc07de94a"
-    },
-    "organization-best-practices": {
-      "source": "better-auth/skills",
-      "sourceType": "github",
-      "skillPath": "better-auth/organization/SKILL.md",
-      "computedHash": "27627eb3a13bd44eff3a5d890f96e7db052b623db90e01684f759abe3e7fe56b"
-    },
-    "two-factor-authentication-best-practices": {
-      "source": "better-auth/skills",
-      "sourceType": "github",
-      "skillPath": "better-auth/twoFactor/SKILL.md",
-      "computedHash": "a6f720042e5a090909e0d519a6a50a7eb8179553cd5315f0bbad852a6d20dac8"
-    }
-  }
+	"version": 1,
+	"skills": {
+		"better-auth-best-practices": {
+			"source": "better-auth/skills",
+			"sourceType": "github",
+			"skillPath": "better-auth/best-practices/SKILL.md",
+			"computedHash": "61ba0ef64ed2e7c424401cc848ca33dd6d790a720c44727717dc0c5cba5fc122"
+		},
+		"better-auth-security-best-practices": {
+			"source": "better-auth/skills",
+			"sourceType": "github",
+			"skillPath": "security/SKILL.md",
+			"computedHash": "7a230edf3a24ce18162cb4379f59b6a19b8d24ca04db530609d0f15cede556dc"
+		},
+		"email-and-password-best-practices": {
+			"source": "better-auth/skills",
+			"sourceType": "github",
+			"skillPath": "better-auth/emailAndPassword/SKILL.md",
+			"computedHash": "747d7f73bd9e2ec5317b8ef88dc70f97df716d00e3d02de4051feebaa48b062d"
+		},
+		"find-skills": {
+			"source": "vercel-labs/skills",
+			"sourceType": "github",
+			"skillPath": "skills/find-skills/SKILL.md",
+			"computedHash": "781bd6d3f9b19f8c9af6b53d8d0e4876d0183841b565db34ca7092ffa412d111"
+		},
+		"frontend-design": {
+			"source": "anthropics/skills",
+			"sourceType": "github",
+			"skillPath": "skills/frontend-design/SKILL.md",
+			"computedHash": "4eabc66183767153e404b39d1b839b1c37f2d82d86f0a0d7e880a579d8d62336"
+		},
+		"improve-codebase-architecture": {
+			"source": "mattpocock/skills",
+			"sourceType": "github",
+			"skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
+			"computedHash": "66e8a50c83c3c724fcfe0769701b665c56cec220cc4f49cc1aee8bdfc07de94a"
+		},
+		"organization-best-practices": {
+			"source": "better-auth/skills",
+			"sourceType": "github",
+			"skillPath": "better-auth/organization/SKILL.md",
+			"computedHash": "27627eb3a13bd44eff3a5d890f96e7db052b623db90e01684f759abe3e7fe56b"
+		},
+		"two-factor-authentication-best-practices": {
+			"source": "better-auth/skills",
+			"sourceType": "github",
+			"skillPath": "better-auth/twoFactor/SKILL.md",
+			"computedHash": "a6f720042e5a090909e0d519a6a50a7eb8179553cd5315f0bbad852a6d20dac8"
+		}
+	}
 }
