@@ -102,6 +102,49 @@ This is display-integrity defense-in-depth; the authorization decision itself is
 always bound to the signed query, never to the unsigned `client_id` URL
 parameter alone.
 
+## Typed integration contract (`@krazil-idp/types`)
+
+`packages/types` exports the wire contract of this IdP for type-safe consumption
+by relying parties and resource servers: `IdTokenClaims`, `UserInfoResponse`,
+`AccessTokenClaims` (a `UserAccessTokenClaims` / `MachineAccessTokenClaims`
+union), the `token-revocation-status` request/response types, `OAuthScope`,
+`AccessTokenMode`, and the `ClientSeed` shape used for client registration.
+
+It has zero runtime dependencies. Besides types it ships small shape guards —
+`parseAccessTokenClaims`, `parseIdTokenClaims`, `parseUserInfo`,
+`revocationIdentity`, `isUserAccessToken`, `isAccessTokenMode`. The guards
+validate shape only: apply them AFTER cryptographic verification (signature via
+discovered JWKS, `iss`, `aud`, `exp`), never instead of it. `revocationIdentity`
+fails closed — a user token without `sid` is rejected rather than skipped.
+
+```ts
+import {
+  parseAccessTokenClaims,
+  revocationIdentity,
+  type TokenRevocationStatusResponse,
+} from "@krazil-idp/types";
+
+const claims = parseAccessTokenClaims(
+  await resourceClient.verifyAccessToken(accessToken, verifyConfig),
+);
+const status = await fetch(revocationStatusUrl, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${revocationCheckSecret}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(revocationIdentity(claims)),
+});
+const body = (await status.json()) as TokenRevocationStatusResponse;
+if (body.active !== true) throw new Error("Token no longer authorized");
+```
+
+`apps/test-rp/server.ts` is the reference consumer. Inside this monorepo,
+depend on `"@krazil-idp/types": "workspace:*"`. External applications can
+vendor `packages/types/src/index.ts` verbatim today; if the package is later
+published to npm, pin the exact version and treat its releases as the IdP's
+compatibility signal.
+
 ## Resource-server verification
 
 Prefer local JWT verification for normal traffic. The resource server still derives issuer, audience, and JWKS URL from discovery/configuration; it does not invent endpoint paths. With the provider resource client:

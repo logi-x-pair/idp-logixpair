@@ -21,6 +21,7 @@ The login pages and `auth.handler` share one origin. Do not split them into sepa
 - `apps/test-rp`: two-port OIDC relying-party verifier using `openid-client`; Playwright proof in `tests/sso.spec.ts`.
 - `packages/auth`: Better Auth configuration, OAuth Provider, JWT, audit hooks, lockout policy.
 - `packages/db`: PostgreSQL/Drizzle schema and Docker Compose.
+- `packages/types`: `@krazil-idp/types`, the published integration contract — token claim types, revocation-status API types, and zero-dependency runtime shape guards for relying parties and resource servers.
 - `branding`: only deployment-specific brand configuration, assets, and first-party client definitions.
 
 ## Local setup
