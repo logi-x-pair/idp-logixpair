@@ -1,4 +1,15 @@
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
+import {
+	type AccessTokenClaims,
+	type IdTokenClaims,
+	isAccessTokenMode,
+	parseAccessTokenClaims,
+	parseIdTokenClaims,
+	parseUserInfo,
+	revocationIdentity,
+	type TokenRevocationStatusResponse,
+	type UserInfoResponse,
+} from "@krazil-idp/types";
 import { createAuthClient } from "better-auth/client";
 import {
 	allowInsecureRequests,
@@ -31,18 +42,14 @@ const redirectUri = requiredEnv("RP_REDIRECT_URI");
 const postLogoutRedirectUri = requiredEnv("RP_POST_LOGOUT_URI");
 const peerLogoutUrl = process.env.RP_PEER_LOGOUT_URL;
 
-const ACCESS_TOKEN_MODES = ["short-lived", "hybrid", "immediate"] as const;
-type AccessTokenMode = (typeof ACCESS_TOKEN_MODES)[number];
 const configuredAccessTokenMode =
 	process.env.OAUTH_ACCESS_TOKEN_MODE ?? "short-lived";
-if (
-	!ACCESS_TOKEN_MODES.includes(configuredAccessTokenMode as AccessTokenMode)
-) {
+if (!isAccessTokenMode(configuredAccessTokenMode)) {
 	throw new Error(
 		`Unsupported OAUTH_ACCESS_TOKEN_MODE: ${configuredAccessTokenMode}`,
 	);
 }
-const accessTokenMode = configuredAccessTokenMode as AccessTokenMode;
+const accessTokenMode = configuredAccessTokenMode;
 const revocationCheckSecret =
 	accessTokenMode === "short-lived"
 		? undefined
@@ -94,8 +101,8 @@ type RPSession = {
 	accessToken: string;
 	refreshToken?: string;
 	idToken: string;
-	claims: Record<string, unknown>;
-	userInfo: Record<string, unknown>;
+	claims: IdTokenClaims;
+	userInfo: UserInfoResponse;
 	callbackState: string;
 	callbackIssuer: string;
 	callbackCodeReceived: boolean;
@@ -126,17 +133,12 @@ function escapeHtml(value: unknown): string {
 }
 
 async function assertAuthoritativeStatus(
-	payload: Record<string, unknown>,
+	payload: AccessTokenClaims,
 ): Promise<void> {
 	if (accessTokenMode === "short-lived") return;
 	if (!revocationCheckSecret) throw new Error("Revocation secret is missing");
-	const sid = typeof payload.sid === "string" ? payload.sid : undefined;
-	const sub = typeof payload.sub === "string" ? payload.sub : undefined;
-	const azp = typeof payload.azp === "string" ? payload.azp : undefined;
-	const jti = typeof payload.jti === "string" ? payload.jti : undefined;
-	const identity =
-		sid && sub ? { sid, sub, jti } : azp ? { azp, jti } : undefined;
-	if (!identity) throw new Error("Access token has no revocation identity");
+	// Fails closed: a user token without sid cannot be status-checked.
+	const identity = revocationIdentity(payload);
 
 	const response = await fetch(revocationStatusUrl, {
 		method: "POST",
@@ -149,7 +151,7 @@ async function assertAuthoritativeStatus(
 	if (!response.ok) {
 		throw new Error(`Revocation status returned HTTP ${response.status}`);
 	}
-	const body = (await response.json()) as { active?: unknown };
+	const body = (await response.json()) as TokenRevocationStatusResponse;
 	if (body.active !== true)
 		throw new Error("Access token is no longer authorized");
 }
@@ -232,8 +234,8 @@ async function handleCallback(request: Request): Promise<Response> {
 		accessToken: tokens.access_token,
 		refreshToken: tokens.refresh_token,
 		idToken: tokens.id_token,
-		claims: claims as Record<string, unknown>,
-		userInfo: userInfo as Record<string, unknown>,
+		claims: parseIdTokenClaims(claims),
+		userInfo: parseUserInfo(userInfo),
 		callbackState: state as string,
 		callbackIssuer: currentUrl.searchParams.get("iss") ?? "",
 		callbackCodeReceived: currentUrl.searchParams.has("code"),
@@ -263,13 +265,15 @@ async function handleRefresh(request: Request): Promise<Response> {
 	const tokens = await refreshTokenGrant(config, session.refreshToken, {
 		resource: discoveredAudience,
 	});
-	const claims = tokens.claims() ?? session.claims;
+	const refreshedClaims = tokens.claims();
 	sessions.set(id as string, {
 		...session,
 		accessToken: tokens.access_token ?? session.accessToken,
 		refreshToken: tokens.refresh_token ?? session.refreshToken,
 		idToken: tokens.id_token ?? session.idToken,
-		claims: claims as Record<string, unknown>,
+		claims: refreshedClaims
+			? parseIdTokenClaims(refreshedClaims)
+			: session.claims,
 	});
 	return new Response(null, { status: 302, headers: { Location: "/" } });
 }
@@ -287,10 +291,12 @@ async function handleProtectedResource(request: Request): Promise<Response> {
 				jwksUrl: string;
 			},
 		) => Promise<Record<string, unknown>>;
-		const payload = await verifyAccessToken(session.accessToken, {
-			verifyOptions: { issuer: verifiedIssuer, audience: discoveredAudience },
-			jwksUrl: verifiedJwksUrl,
-		});
+		const payload = parseAccessTokenClaims(
+			await verifyAccessToken(session.accessToken, {
+				verifyOptions: { issuer: verifiedIssuer, audience: discoveredAudience },
+				jwksUrl: verifiedJwksUrl,
+			}),
+		);
 		await assertAuthoritativeStatus(payload);
 		const verificationMessage =
 			accessTokenMode === "short-lived"
