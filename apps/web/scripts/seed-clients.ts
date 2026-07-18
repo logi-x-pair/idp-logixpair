@@ -9,10 +9,10 @@
  * Run from apps/web:  bun run seed:clients [--json]
  */
 import { auth } from "@krazil-idp/auth";
-import type { ClientSeed } from "@krazil-idp/auth/seed-types";
 import { clientSeeds } from "@krazil-idp/branding/clients";
 import { db } from "@krazil-idp/db";
 import { oauthClient } from "@krazil-idp/db/schema/auth";
+import type { ClientSeed } from "@krazil-idp/types";
 import { eq } from "drizzle-orm";
 
 import { adminHeaders } from "./admin-session";

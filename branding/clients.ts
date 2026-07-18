@@ -1,19 +1,8 @@
 /**
- * Shape of a first-party client definition for this deployment. This type is
- * local so the branding package remains dependency-free and can be merged
- * independently of the auth implementation.
+ * The client definition contract lives in `@krazil-idp/types` (zero-runtime
+ * dependency), keeping brand data decoupled from the auth implementation.
  */
-export interface ClientSeed {
-	name: string;
-	redirectUris: string[];
-	postLogoutRedirectUris?: string[];
-	uri?: string;
-	icon?: string;
-	scope?: string;
-	type: "confidential" | "public";
-	skipConsent: boolean;
-	enableEndSession: boolean;
-}
+import type { ClientSeed } from "@krazil-idp/types";
 
 /**
  * First-party relying parties for THIS brand deployment.

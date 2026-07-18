@@ -1,9 +1,16 @@
+import type {
+	TokenRevocationStatusRequest,
+	TokenRevocationStatusResponse,
+} from "@krazil-idp/types";
 import { createAuthEndpoint } from "better-auth/api";
 import { constantTimeEqual } from "better-auth/crypto";
 import { z } from "zod";
 
 import { isAccessTokenDenylisted } from "./jwt-revocation";
 
+// The declared output type binds this schema to the public wire contract in
+// @krazil-idp/types; acceptance semantics are unchanged from the original
+// refine (sid+sub without azp, or azp alone).
 const statusBody = z
 	.object({
 		sid: z.string().min(1).optional(),
@@ -11,12 +18,20 @@ const statusBody = z
 		azp: z.string().min(1).optional(),
 		jti: z.string().min(1).optional(),
 	})
-	.refine(
-		(value) =>
-			(Boolean(value.sid) && Boolean(value.sub) && !value.azp) ||
-			(Boolean(value.azp) && !value.sid && !value.sub),
-		"Provide either sid+sub for a user token or azp for a machine token",
-	);
+	.transform((value, ctx): TokenRevocationStatusRequest => {
+		if (value.sid && value.sub && !value.azp) {
+			return { sid: value.sid, sub: value.sub, jti: value.jti };
+		}
+		if (value.azp && !value.sid && !value.sub) {
+			return { azp: value.azp, jti: value.jti };
+		}
+		ctx.addIssue({
+			code: "custom",
+			message:
+				"Provide either sid+sub for a user token or azp for a machine token",
+		});
+		return z.NEVER;
+	});
 
 export function revocationStatus(options: { secret: string }) {
 	return {
@@ -42,29 +57,31 @@ export function revocationStatus(options: { secret: string }) {
 						});
 					}
 
-					const { sid, sub, azp, jti } = ctx.body;
-					if (jti && (await isAccessTokenDenylisted(jti))) {
-						return ctx.json({ active: false });
+					const identity = ctx.body;
+					if (identity.jti && (await isAccessTokenDenylisted(identity.jti))) {
+						return ctx.json({
+							active: false,
+						} satisfies TokenRevocationStatusResponse);
 					}
 					let active = false;
-					if (sid && sub) {
+					if ("sid" in identity) {
 						const session = (await ctx.context.adapter.findOne({
 							model: "session",
 							where: [
-								{ field: "id", value: sid },
-								{ field: "userId", value: sub },
+								{ field: "id", value: identity.sid },
+								{ field: "userId", value: identity.sub },
 							],
 						})) as { expiresAt: Date | string } | null;
 						active =
 							!!session && new Date(session.expiresAt).getTime() > Date.now();
-					} else if (azp) {
+					} else {
 						const client = (await ctx.context.adapter.findOne({
 							model: "oauthClient",
-							where: [{ field: "clientId", value: azp }],
+							where: [{ field: "clientId", value: identity.azp }],
 						})) as { disabled?: boolean } | null;
 						active = !!client && client.disabled !== true;
 					}
-					return ctx.json({ active });
+					return ctx.json({ active } satisfies TokenRevocationStatusResponse);
 				},
 			),
 		},
