@@ -7,6 +7,9 @@
 		},
 		"./assets/*": "./assets/*"
 	},
+	"dependencies": {
+		"@krazil-idp/types": "workspace:*"
+	},
 	"devDependencies": {
 		"@krazil-idp/config": "workspace:*",
 		"typescript": "catalog:"

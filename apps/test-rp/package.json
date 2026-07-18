@@ -10,6 +10,7 @@
 	},
 	"dependencies": {
 		"@better-auth/oauth-provider": "1.6.23",
+		"@krazil-idp/types": "workspace:*",
 		"better-auth": "1.6.23",
 		"openid-client": "6.8.4"
 	},

@@ -22,6 +22,7 @@
       "name": "test-rp",
       "dependencies": {
         "@better-auth/oauth-provider": "1.6.23",
+        "@krazil-idp/types": "workspace:*",
         "better-auth": "1.6.23",
         "openid-client": "6.8.4",
       },
@@ -40,6 +41,7 @@
         "@krazil-idp/branding": "workspace:*",
         "@krazil-idp/db": "workspace:*",
         "@krazil-idp/env": "workspace:*",
+        "@krazil-idp/types": "workspace:*",
         "@krazil-idp/ui": "workspace:*",
         "@swc/helpers": "^0.5.23",
         "@tanstack/react-form": "^1.33.0",
@@ -69,6 +71,9 @@
     },
     "branding": {
       "name": "@krazil-idp/branding",
+      "dependencies": {
+        "@krazil-idp/types": "workspace:*",
+      },
       "devDependencies": {
         "@krazil-idp/config": "workspace:*",
         "typescript": "catalog:",
@@ -81,6 +86,7 @@
         "@krazil-idp/branding": "workspace:*",
         "@krazil-idp/db": "workspace:*",
         "@krazil-idp/env": "workspace:*",
+        "@krazil-idp/types": "workspace:*",
         "better-auth": "catalog:",
         "dotenv": "catalog:",
         "drizzle-orm": "^0.45.2",
@@ -122,6 +128,15 @@
         "dotenv": "catalog:",
         "zod": "catalog:",
       },
+      "devDependencies": {
+        "@krazil-idp/config": "workspace:*",
+        "@types/node": "^22.13.14",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/types": {
+      "name": "@krazil-idp/types",
+      "version": "0.1.0",
       "devDependencies": {
         "@krazil-idp/config": "workspace:*",
         "@types/node": "^22.13.14",
@@ -419,6 +434,8 @@
     "@krazil-idp/db": ["@krazil-idp/db@workspace:packages/db"],
 
     "@krazil-idp/env": ["@krazil-idp/env@workspace:packages/env"],
+
+    "@krazil-idp/types": ["@krazil-idp/types@workspace:packages/types"],
 
     "@krazil-idp/ui": ["@krazil-idp/ui@workspace:packages/ui"],
 

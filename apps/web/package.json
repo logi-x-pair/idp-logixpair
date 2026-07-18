@@ -21,6 +21,7 @@
 		"@krazil-idp/db": "workspace:*",
 		"@krazil-idp/env": "workspace:*",
 		"@krazil-idp/ui": "workspace:*",
+		"@krazil-idp/types": "workspace:*",
 		"@swc/helpers": "^0.5.23",
 		"@tanstack/react-form": "^1.33.0",
 		"babel-plugin-react-compiler": "^1.0.0",
