@@ -101,9 +101,20 @@ bun --cwd apps/web run clients disable <client_id>
 bun --cwd apps/web run clients enable <client_id>
 bun --cwd apps/web run revoke-user <email>
 bun --cwd apps/web run revoke-token <jwt_access_token>
+bun --cwd apps/web run set-role <email> <admin|moderator|user>
 ```
 
-`seed:admin` is deliberate and proves password ownership before assigning the server-only `admin` role. Public signup cannot set that role. `seed:clients` is idempotent by client name and prints a new client secret only at creation/rotation; store it immediately.
+`seed:admin` is deliberate and proves password ownership before assigning the server-only `admin` role. Public signup cannot set any role. `seed:clients` is idempotent by client name and prints a new client secret only at creation/rotation; store it immediately.
+
+### Operator roles
+
+Role-based user administration is served by Better Auth's admin plugin under `/api/auth/admin/*`, with access control defined in `packages/auth/src/permissions.ts`:
+
+- `admin`: full operator — the only role that may delete accounts, assign roles, change emails/passwords, or impersonate. OAuth client management additionally requires `OAUTH_ADMIN_EMAILS` membership.
+- `moderator`: HR-style account lifecycle — create accounts, list/read, update profile fields, and enable/disable sign-in via ban/unban (banning also revokes the user's sessions). Deliberately cannot delete accounts, change roles/emails/passwords, or impersonate, and can never ban or remove an account holding the `admin` role (enforced by a dedicated server guard).
+- `user`: no operator permissions (default).
+
+Assign roles with `bun --cwd apps/web run set-role <email> <role>` (refuses to demote the last admin) or, as an admin, via the `/admin/set-role` endpoint.
 
 ```bash
 bun --cwd apps/web x auth@1.6.23 generate \
