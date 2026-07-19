@@ -22,7 +22,8 @@ export type AuditEvent =
 	| "consent.granted"
 	| "consent.denied"
 	| "consent.revoked"
-	| "password.reset";
+	| "password.reset"
+	| "admin.protected_target_rejected";
 
 export function audit(
 	event: AuditEvent,

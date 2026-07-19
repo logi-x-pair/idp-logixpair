@@ -2,7 +2,7 @@ import { db } from "@krazil-idp/db";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
 import { env } from "@krazil-idp/env/server";
 import { APIError, type BetterAuthPlugin } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { eq, sql } from "drizzle-orm";
 
 import { audit } from "./audit";
@@ -314,6 +314,64 @@ export function securityAuditPlugin(): BetterAuthPlugin {
 				{
 					matcher: () => true,
 					handler: auditHook,
+				},
+			],
+		},
+	};
+}
+
+const GUARDED_ADMIN_PATHS: Record<string, true> = {
+	"/admin/ban-user": true,
+	"/admin/update-user": true,
+	"/admin/remove-user": true,
+};
+
+/**
+ * Protects admin accounts from non-admin operators. The admin plugin's access
+ * control decides WHAT a role may do (e.g. moderators may ban), but not WHOM
+ * it may target: without this guard a moderator could lock out or (with a
+ * future role grant) delete an operator. Invariant: only admins may ban,
+ * ban-edit, or remove an account holding the admin role.
+ */
+export function adminTargetGuardPlugin(): BetterAuthPlugin {
+	return {
+		id: "admin-target-guard",
+		hooks: {
+			before: [
+				{
+					matcher: (ctx) => GUARDED_ADMIN_PATHS[ctx.path ?? ""] === true,
+					handler: createAuthMiddleware(async (ctx) => {
+						const body = ctx.body as
+							| { userId?: string; data?: Record<string, unknown> }
+							| undefined;
+						if (ctx.path === "/admin/update-user") {
+							const data = body?.data;
+							const touchesBan =
+								data &&
+								("banned" in data ||
+									"banReason" in data ||
+									"banExpires" in data);
+							if (!touchesBan) return;
+						}
+						const targetId = body?.userId;
+						if (!targetId) return; // plugin body validation rejects this
+						const session = await getSessionFromCtx(ctx);
+						const actor = session?.user as
+							| { email?: string; role?: string }
+							| undefined;
+						if (actor?.role?.split(",").includes("admin")) return;
+						const target = (await ctx.context.internalAdapter.findUserById(
+							targetId,
+						)) as { role?: string } | null;
+						if (!target?.role?.split(",").includes("admin")) return;
+						audit("admin.protected_target_rejected", {
+							email: actor?.email,
+							path: ctx.path,
+						});
+						throw new APIError("FORBIDDEN", {
+							message: "Only admins may modify admin accounts",
+						});
+					}),
 				},
 			],
 		},

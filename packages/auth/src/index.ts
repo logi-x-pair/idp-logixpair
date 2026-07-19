@@ -6,15 +6,18 @@ import { env } from "@krazil-idp/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
+import { admin } from "better-auth/plugins/admin";
 import { jwt } from "better-auth/plugins/jwt";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { audit } from "./audit";
 import { mailer, resetPasswordEmail, verificationEmail } from "./email";
 import {
+	adminTargetGuardPlugin,
 	IP_ADDRESS_HEADERS,
 	lockoutGuard,
 	securityAuditPlugin,
 } from "./guards";
+import { ac, roles } from "./permissions";
 import { revocationStatus } from "./revocation-status";
 import { SCOPE_EXPIRATIONS, TOKEN_LIFETIMES } from "./token-config";
 
@@ -94,17 +97,9 @@ export function createAuth() {
 				await mailer.send(verificationEmail(user.email, url));
 			},
 		},
-		user: {
-			additionalFields: {
-				// Operator role. `input: false` = NEVER settable through public
-				// sign-up; only server-side provisioning (seed:admin) assigns it.
-				role: {
-					type: "string",
-					defaultValue: "user",
-					input: false,
-				},
-			},
-		},
+		// The user `role` field is owned by the admin plugin below (string,
+		// `input: false` — NEVER settable through public sign-up; assigned only
+		// by server-side provisioning: seed:admin and the set-role CLI).
 		secret: env.BETTER_AUTH_SECRET,
 		baseURL: env.BETTER_AUTH_URL,
 		// The JWT plugin exposes a session-token endpoint at /token; the OAuth
@@ -128,6 +123,14 @@ export function createAuth() {
 				? [revocationStatus({ secret: revocationSecret })]
 				: []),
 			jwt(),
+			admin({
+				ac,
+				roles,
+				defaultRole: "user",
+				adminRoles: ["admin"],
+			}),
+			// Blocks non-admin operators from ban/remove actions on admin accounts.
+			adminTargetGuardPlugin(),
 			twoFactor({
 				issuer: branding.brandName,
 				twoFactorCookieMaxAge: 10 * 60,
