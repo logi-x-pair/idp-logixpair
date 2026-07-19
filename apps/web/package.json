@@ -9,6 +9,7 @@
 		"seed:admin": "bun run scripts/seed-admin.ts",
 		"seed:user": "bun run scripts/seed-user.ts",
 		"seed:clients": "bun run scripts/seed-clients.ts",
+		"set-role": "bun run scripts/set-role.ts",
 		"clients": "bun run scripts/clients.ts",
 		"revoke-user": "bun run scripts/revoke-user.ts",
 		"revoke-token": "bun run scripts/revoke-token.ts",
