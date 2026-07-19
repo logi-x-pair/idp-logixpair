@@ -181,7 +181,13 @@ signature, issuer, audience, expiry, and `azp` ownership before storing its
 signed `jti`. The denylist is checked by OAuth introspection and
 `token-revocation-status`; raw JWKS verification cannot observe database
 revocations. `revoke-user` remains the user-wide session, refresh-token, and
-opaque-token kill switch but does not enumerate already-issued JWTs.
+opaque-token kill switch but does not enumerate already-issued JWTs. An
+operator ban runs the same revocation transaction automatically and the token
+endpoint refuses new issuance to banned subjects, so a banned user cannot
+obtain fresh tokens on any grant. Already-issued JWTs still verify against
+JWKS until `exp`: RPs doing local-only (`short-lived`) verification keep
+accepting them for up to the token TTL, while `hybrid`/`immediate` resource
+servers reject them immediately because the ban deleted the IdP session.
 
 Do not use `/oauth2/introspect` as a substitute for local signature
 verification. It is the right place to enforce a denylisted JWT because it now

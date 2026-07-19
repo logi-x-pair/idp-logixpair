@@ -110,9 +110,11 @@ bun --cwd apps/web run set-role <email> <admin|moderator|user>
 
 Role-based user administration is served by Better Auth's admin plugin under `/api/auth/admin/*`, with access control defined in `packages/auth/src/permissions.ts`:
 
-- `admin`: full operator — the only role that may delete accounts, assign roles, change emails/passwords, or impersonate. OAuth client management additionally requires `OAUTH_ADMIN_EMAILS` membership.
-- `moderator`: HR-style account lifecycle — create accounts, list/read, update profile fields, and enable/disable sign-in via ban/unban (banning also revokes the user's sessions). Deliberately cannot delete accounts, change roles/emails/passwords, or impersonate, and can never ban or remove an account holding the `admin` role (enforced by a dedicated server guard).
+- `admin`: full operator — the only role that may delete accounts, assign roles, change emails/passwords, manage sessions, or impersonate. OAuth client management additionally requires `OAUTH_ADMIN_EMAILS` membership.
+- `moderator`: HR-style account lifecycle — create accounts (no extra `data` fields), list/read, update allowlisted profile fields (`name`, `image`), and enable/disable sign-in via ban/unban. Deliberately cannot delete accounts, change roles/emails/passwords, manage sessions, or impersonate, and can never ban, unban, or remove an account holding the `admin` role (enforced by a dedicated server guard). The exclusions are a deployment policy — adjust them in `packages/auth/src/permissions.ts` with the tradeoffs documented there.
 - `user`: no operator permissions (default).
+
+Ban enforcement is IdP-wide, not just session-deep: banning revokes the user's sessions, all OAuth refresh tokens, and opaque access tokens in one transaction, blocks completion of a pending 2FA challenge, and the token endpoint refuses to issue tokens to a banned subject on any grant (JWT and opaque alike). One caveat: **already-issued JWT access tokens remain valid until `exp` for relying parties that only verify locally** — hybrid/immediate resource servers reject them immediately because the ban deleted the session (see INTEGRATION.md). Use `revoke-token` for a specific outstanding JWT.
 
 Assign roles with `bun --cwd apps/web run set-role <email> <role>` (refuses to demote the last admin) or, as an admin, via the `/admin/set-role` endpoint.
 
