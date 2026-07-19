@@ -5,7 +5,25 @@
 		"build": {
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", ".env*"],
-			"outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+			"outputs": ["dist/**", ".next/**", "!.next/cache/**"],
+			// Turbo 2 strict env mode strips undeclared variables from task
+			// environments (locally masked by dotenv reading .env off disk).
+			// Declare every var the env schema (packages/env/src/server.ts)
+			// consumes so CI/builds receive them and they hash the cache.
+			"env": [
+				"DATABASE_URL",
+				"BETTER_AUTH_SECRET",
+				"BETTER_AUTH_URL",
+				"CORS_ORIGIN",
+				"REQUIRE_EMAIL_VERIFICATION",
+				"TWO_FACTOR_ENABLED",
+				"RATE_LIMIT_STORAGE",
+				"TRUSTED_PROXIES",
+				"OAUTH_*",
+				"IDP_ADMIN_*",
+				"MAILER_*",
+				"SKIP_ENV_VALIDATION"
+			]
 		},
 		"lint": {
 			"dependsOn": ["^lint"]
