@@ -23,6 +23,9 @@ export const user = pgTable("user", {
 		.notNull(),
 	twoFactorEnabled: boolean("two_factor_enabled").default(false),
 	role: text("role").default("user").notNull(),
+	banned: boolean("banned").default(false),
+	banReason: text("ban_reason"),
+	banExpires: timestamp("ban_expires"),
 });
 
 export const session = pgTable(
@@ -37,6 +40,7 @@ export const session = pgTable(
 			.notNull(),
 		ipAddress: text("ip_address"),
 		userAgent: text("user_agent"),
+		impersonatedBy: text("impersonated_by"),
 		userId: text("user_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
