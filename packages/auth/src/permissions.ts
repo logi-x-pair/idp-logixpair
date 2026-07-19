@@ -9,21 +9,36 @@ import {
  * Operator access control for the admin plugin. Three roles:
  *
  * - `admin`: full operator. The only role that may delete accounts, change
- *   roles/emails/passwords, or impersonate. OAuth client management
- *   additionally requires OAUTH_ADMIN_EMAILS membership (see index.ts).
+ *   roles/emails/passwords, manage sessions, or impersonate. OAuth client
+ *   management additionally requires OAUTH_ADMIN_EMAILS membership (see
+ *   index.ts).
  * - `moderator`: account lifecycle WITHOUT destructive or escalating rights.
  *   Built for HR-style operators: create accounts, list/read, update profile
- *   fields, and enable/disable sign-in via ban/unban (`ban` covers both).
- *   Deliberately excluded:
- *     - `delete`          — account deletion is admin-only by requirement
- *     - `set-role`        — prevents self/peer privilege escalation
- *     - `set-password`,
- *       `set-email`       — account-takeover vectors; use the email reset flow
- *     - `impersonate`     — session takeover is admin-only
+ *   fields (allowlisted in guards.ts — name/image only), and enable/disable
+ *   sign-in via ban/unban. Banning also revokes the user's sessions, OAuth
+ *   refresh tokens, and opaque access tokens (guards.ts
+ *   banEnforcementPlugin).
  * - `user`: no operator permissions (plugin default).
  *
- * Guard invariant (guards.ts adminTargetGuardPlugin): non-admin operators can
- * never ban, ban-edit, or delete an account that holds the admin role.
+ * Deliberately excluded from `moderator` — each exclusion is a deployment
+ * policy choice; adjust this list to your org's needs, but understand what
+ * each grant re-opens:
+ *   - `delete`             — account deletion stays admin-only. Grant it only
+ *                            if HR truly owns offboarding data destruction;
+ *                            ban already removes all access and is reversible.
+ *   - `set-role`           — would let moderators promote themselves/peers.
+ *   - `set-password`,
+ *     `set-email`          — account-takeover vectors; password changes
+ *                            belong to the email reset flow.
+ *   - `impersonate`        — session takeover is admin-only.
+ *   - `session` statements — ban covers access removal; direct session
+ *                            list/revoke would let moderators target admin
+ *                            sessions (the target guard only covers
+ *                            ban/update/remove routes).
+ *
+ * Guard invariants (guards.ts adminTargetGuardPlugin): non-admin operators
+ * can never ban, ban-edit, or remove an account holding the admin role, and
+ * their update-user requests are restricted to a field allowlist.
  */
 export const ac = createAccessControl(defaultStatements);
 
@@ -31,7 +46,6 @@ export const roles = {
 	admin: ac.newRole(adminAc.statements),
 	moderator: ac.newRole({
 		user: ["create", "list", "get", "update", "ban"],
-		session: ["list", "revoke"],
 	}),
 	user: ac.newRole(userAc.statements),
 };

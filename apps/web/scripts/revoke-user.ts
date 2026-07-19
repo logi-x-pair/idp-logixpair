@@ -15,13 +15,9 @@
  * remains valid until the JWT expires. Signing-key rotation invalidates every
  * outstanding JWT and is the emergency global fallback.
  */
+import { revokeUserTokens } from "@krazil-idp/auth/user-revocation";
 import { db } from "@krazil-idp/db";
-import {
-	oauthAccessToken,
-	oauthRefreshToken,
-	session,
-	user,
-} from "@krazil-idp/db/schema/auth";
+import { user } from "@krazil-idp/db/schema/auth";
 import { eq } from "drizzle-orm";
 
 const email = process.argv[2];
@@ -40,26 +36,7 @@ if (users.length === 0) {
 }
 const userId = users[0].id;
 
-const revocation = await db.transaction(async (tx) => {
-	const revokedRefresh = await tx
-		.update(oauthRefreshToken)
-		.set({ revoked: new Date() })
-		.where(eq(oauthRefreshToken.userId, userId))
-		.returning({ id: oauthRefreshToken.id });
-	const deletedAccess = await tx
-		.delete(oauthAccessToken)
-		.where(eq(oauthAccessToken.userId, userId))
-		.returning({ id: oauthAccessToken.id });
-	const deletedSessions = await tx
-		.delete(session)
-		.where(eq(session.userId, userId))
-		.returning({ id: session.id });
-	return {
-		refreshTokensRevoked: revokedRefresh.length,
-		opaqueAccessTokensDeleted: deletedAccess.length,
-		sessionsDeleted: deletedSessions.length,
-	};
-});
+const revocation = await revokeUserTokens(userId);
 
 console.log(
 	JSON.stringify({

@@ -13,6 +13,7 @@ import { audit } from "./audit";
 import { mailer, resetPasswordEmail, verificationEmail } from "./email";
 import {
 	adminTargetGuardPlugin,
+	banEnforcementPlugin,
 	IP_ADDRESS_HEADERS,
 	lockoutGuard,
 	securityAuditPlugin,
@@ -129,8 +130,10 @@ export function createAuth() {
 				defaultRole: "user",
 				adminRoles: ["admin"],
 			}),
-			// Blocks non-admin operators from ban/remove actions on admin accounts.
+			// Non-admin operators: admin-target protection + update field allowlist.
 			adminTargetGuardPlugin(),
+			// Bans must kill OAuth tokens too, not just sessions (see guards.ts).
+			banEnforcementPlugin(),
 			twoFactor({
 				issuer: branding.brandName,
 				twoFactorCookieMaxAge: 10 * 60,

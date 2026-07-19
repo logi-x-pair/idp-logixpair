@@ -1,4 +1,5 @@
 import { db } from "@krazil-idp/db";
+import { oauthAccessToken, user } from "@krazil-idp/db/schema/auth";
 import { loginAttempt } from "@krazil-idp/db/schema/lockout";
 import { env } from "@krazil-idp/env/server";
 import { APIError, type BetterAuthPlugin } from "better-auth";
@@ -14,6 +15,7 @@ import {
 	verifyRevocableAccessToken,
 } from "./jwt-revocation";
 import { LOCKOUT } from "./token-config";
+import { revokeUserTokens } from "./user-revocation";
 
 /**
  * Single source of truth for the trusted client-IP header. index.ts feeds the
@@ -321,17 +323,46 @@ export function securityAuditPlugin(): BetterAuthPlugin {
 }
 
 const GUARDED_ADMIN_PATHS: Record<string, true> = {
+	"/admin/create-user": true,
 	"/admin/ban-user": true,
+	"/admin/unban-user": true,
 	"/admin/update-user": true,
 	"/admin/remove-user": true,
 };
 
 /**
- * Protects admin accounts from non-admin operators. The admin plugin's access
+ * Fields a non-admin operator (moderator) may pass to /admin/update-user.
+ * The plugin itself only special-cases password/role/ban/email — everything
+ * else (e.g. twoFactorEnabled, timestamps) would flow straight to the
+ * database under the generic `update` permission. Ban fields are listed here
+ * but additionally require the `ban` permission and a non-admin target.
+ * Extend deliberately per deployment; every addition widens what HR-style
+ * operators can mutate.
+ */
+const MODERATOR_UPDATABLE_FIELDS: Record<string, true> = {
+	name: true,
+	image: true,
+	banned: true,
+	banReason: true,
+	banExpires: true,
+};
+
+/**
+ * Hardens admin-plugin routes for non-admin operators. The plugin's access
  * control decides WHAT a role may do (e.g. moderators may ban), but not WHOM
- * it may target: without this guard a moderator could lock out or (with a
- * future role grant) delete an operator. Invariant: only admins may ban,
- * ban-edit, or remove an account holding the admin role.
+ * it may target or WHICH raw fields `update` may touch. Invariants:
+ *
+ * 1. Only admins may ban, ban-edit, or remove an account holding the admin
+ *    role — otherwise a moderator could lock out an operator.
+ * 2. Non-admin update-user requests are restricted to an explicit field
+ *    allowlist, and non-admin create-user requests may not carry a `data`
+ *    payload at all — otherwise the generic permissions could disable an
+ *    employee's 2FA, pre-verify emails, or write arbitrary columns.
+ *
+ * Moderators MAY set the initial password at creation (it is a required
+ * create-user field and part of onboarding); changing an EXISTING account's
+ * password stays admin-only (`set-password`). Prefer a throwaway initial
+ * password plus the email reset flow.
  */
 export function adminTargetGuardPlugin(): BetterAuthPlugin {
 	return {
@@ -344,22 +375,47 @@ export function adminTargetGuardPlugin(): BetterAuthPlugin {
 						const body = ctx.body as
 							| { userId?: string; data?: Record<string, unknown> }
 							| undefined;
-						if (ctx.path === "/admin/update-user") {
-							const data = body?.data;
-							const touchesBan =
-								data &&
-								("banned" in data ||
-									"banReason" in data ||
-									"banExpires" in data);
-							if (!touchesBan) return;
-						}
-						const targetId = body?.userId;
-						if (!targetId) return; // plugin body validation rejects this
 						const session = await getSessionFromCtx(ctx);
 						const actor = session?.user as
 							| { email?: string; role?: string }
 							| undefined;
 						if (actor?.role?.split(",").includes("admin")) return;
+
+						if (ctx.path === "/admin/create-user") {
+							const extraFields = Object.keys(body?.data ?? {});
+							if (extraFields.length === 0) return;
+							audit("admin.update_fields_rejected", {
+								email: actor?.email,
+								path: ctx.path,
+								fields: extraFields,
+							});
+							throw new APIError("FORBIDDEN", {
+								message:
+									"Non-admin operators may not set additional fields at creation",
+							});
+						}
+
+						if (ctx.path === "/admin/update-user") {
+							const data = body?.data ?? {};
+							const rejected = Object.keys(data).filter(
+								(key) => MODERATOR_UPDATABLE_FIELDS[key] !== true,
+							);
+							if (rejected.length > 0) {
+								audit("admin.update_fields_rejected", {
+									email: actor?.email,
+									fields: rejected,
+								});
+								throw new APIError("FORBIDDEN", {
+									message: `Non-admin operators may not update: ${rejected.join(", ")}`,
+								});
+							}
+							const touchesBan =
+								"banned" in data || "banReason" in data || "banExpires" in data;
+							if (!touchesBan) return;
+						}
+
+						const targetId = body?.userId;
+						if (!targetId) return; // plugin body validation rejects this
 						const target = (await ctx.context.internalAdapter.findUserById(
 							targetId,
 						)) as { role?: string } | null;
@@ -370,6 +426,151 @@ export function adminTargetGuardPlugin(): BetterAuthPlugin {
 						});
 						throw new APIError("FORBIDDEN", {
 							message: "Only admins may modify admin accounts",
+						});
+					}),
+				},
+			],
+		},
+	};
+}
+
+const BAN_MUTATION_PATHS: Record<string, true> = {
+	"/admin/ban-user": true,
+	"/admin/update-user": true,
+};
+
+function jwtSubject(token: string): string | undefined {
+	const payload = token.split(".")[1];
+	if (!payload) return undefined;
+	try {
+		const claims = JSON.parse(
+			Buffer.from(payload, "base64url").toString("utf8"),
+		) as { sub?: unknown };
+		return typeof claims.sub === "string" ? claims.sub : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Resolves the user an issued access token belongs to. JWT access tokens
+ * (issued when the grant carried a resource/audience) carry `sub`; opaque
+ * tokens (no audience requested) are looked up by their database row after
+ * stripping the configured secret-scanner prefix. Rows are stored under the
+ * provider's default `storeTokens: "hashed"` transform (SHA-256, unpadded
+ * base64url) — keep this in sync if `storeTokens` is ever customized.
+ */
+async function issuedTokenUserId(
+	accessToken: string,
+): Promise<string | undefined> {
+	const sub = jwtSubject(accessToken);
+	if (sub) return sub;
+	const prefix = env.OAUTH_ACCESS_TOKEN_PREFIX ?? "";
+	const raw =
+		prefix && accessToken.startsWith(prefix)
+			? accessToken.slice(prefix.length)
+			: accessToken;
+	const digest = await crypto.subtle.digest(
+		"SHA-256",
+		new TextEncoder().encode(raw),
+	);
+	const hashed = Buffer.from(digest).toString("base64url");
+	const rows = await db
+		.select({ userId: oauthAccessToken.userId })
+		.from(oauthAccessToken)
+		.where(eq(oauthAccessToken.token, hashed));
+	return rows[0]?.userId ?? undefined;
+}
+
+/**
+ * Makes bans effective across the OAuth surface, not just IdP sessions.
+ * The admin plugin only deletes sessions on ban, and the OAuth provider's
+ * refresh grant never consults `banned` — without this plugin a banned
+ * user's RP would keep minting tokens from its refresh token.
+ *
+ * 1. After a successful ban (ban-user, or update-user setting banned), all
+ *    of the user's OAuth refresh tokens are revoked and opaque access
+ *    tokens deleted (same transaction as the revoke-user incident CLI).
+ * 2. After any successful /oauth2/token response for a user subject, the
+ *    issuance is rejected when that user is under an active ban — closing
+ *    the window for pre-ban authorization codes and any grant path the
+ *    revocation sweep might miss.
+ *
+ * Already-issued JWT access tokens remain valid until `exp` for RPs doing
+ * local-only verification; hybrid/immediate status checks reject them
+ * immediately because the ban deleted the session.
+ */
+export function banEnforcementPlugin(): BetterAuthPlugin {
+	return {
+		id: "ban-enforcement",
+		hooks: {
+			after: [
+				{
+					matcher: (ctx) => BAN_MUTATION_PATHS[ctx.path ?? ""] === true,
+					handler: createAuthMiddleware(async (ctx) => {
+						if (ctx.context.returned instanceof APIError) return;
+						const body = ctx.body as
+							| { userId?: string; data?: Record<string, unknown> }
+							| undefined;
+						if (
+							ctx.path === "/admin/update-user" &&
+							body?.data?.banned !== true
+						) {
+							return;
+						}
+						const targetId = body?.userId;
+						if (!targetId) return;
+						const revocation = await revokeUserTokens(targetId);
+						audit("user.tokens_revoked", {
+							userId: targetId,
+							trigger: ctx.path,
+							...revocation,
+						});
+					}),
+				},
+				{
+					matcher: (ctx) => ctx.path === "/oauth2/token",
+					handler: createAuthMiddleware(async (ctx) => {
+						// Token responses arrive as a fetch Response; unwrap it the way
+						// better-auth's own plugin-helper does (not publicly exported).
+						const returned = ctx.context.returned;
+						let tokenResponse: { access_token?: unknown } | undefined;
+						if (returned instanceof Response) {
+							if (returned.status !== 200) return;
+							tokenResponse = (await returned
+								.clone()
+								.json()
+								.catch(() => undefined)) as
+								| { access_token?: unknown }
+								| undefined;
+						} else if (
+							returned &&
+							!(returned instanceof APIError) &&
+							typeof returned === "object"
+						) {
+							tokenResponse = returned as { access_token?: unknown };
+						}
+						const accessToken = tokenResponse?.access_token;
+						if (typeof accessToken !== "string") return;
+						const sub = await issuedTokenUserId(accessToken);
+						if (!sub) return; // machine tokens carry no user subject
+						const rows = await db
+							.select({ banned: user.banned, banExpires: user.banExpires })
+							.from(user)
+							.where(eq(user.id, sub));
+						const target = rows[0];
+						const activelyBanned =
+							target?.banned === true &&
+							(!target.banExpires || target.banExpires.getTime() > Date.now());
+						if (!activelyBanned) return;
+						audit("token.banned_user_rejected", {
+							userId: sub,
+							clientId: (ctx.body as { client_id?: string } | undefined)
+								?.client_id,
+						});
+						throw new APIError("BAD_REQUEST", {
+							error: "invalid_grant",
+							error_description: "user access is disabled",
 						});
 					}),
 				},
