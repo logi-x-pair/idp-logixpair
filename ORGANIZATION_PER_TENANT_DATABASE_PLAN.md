@@ -327,10 +327,11 @@ Every tenant data request should follow this sequence:
 4. Obtain the signed organization_id.
 5. Confirm the token belongs to this ERP application.
 6. Resolve the organization’s trusted isolation mode.
-7. If `shared`, select the configured shared database pool/profile.
-8. If `dedicated`, resolve the organization binding and its `secret_ref` using the ERP service identity.
-9. Reuse or create a bounded connection pool for the selected data plane.
-10. Execute the request through the selected shared or dedicated data plane.
+7. Confirm the deployment/binding status is `active`; otherwise fail closed before routing.
+8. If `shared`, select the configured shared database pool/profile.
+9. If `dedicated`, resolve the organization binding and its `secret_ref` using the ERP service identity.
+10. Reuse or create a bounded connection pool for the selected data plane.
+11. Execute the request through the selected shared or dedicated data plane.
 ```
 
 The browser should never select a database host or connection string.
