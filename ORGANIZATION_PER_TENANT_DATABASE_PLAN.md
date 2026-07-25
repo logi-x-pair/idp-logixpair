@@ -44,16 +44,18 @@ flowchart LR
 
     ControlDB --> Identity[Users, organizations, memberships]
     ControlDB --> Deployment[Organization isolation mode]
-    Deployment --> SharedDB[(Shared ERP DB)]
+    Deployment --> SharedProfile[Configured shared DB profile]
     Deployment --> Binding[Dedicated DB binding]
-    Binding -->|secret_ref only| Secrets[Secrets Manager]
+    Binding -->|secret_ref| Secrets[Secrets Manager]
 
     IdP -->|Signed token with organization_id| ERP[ERP backend]
     ERP -->|organization_id + mode| Resolver[Database resolver]
-    Resolver --> SharedDB
-    Resolver --> Secrets
-    Secrets -->|Server-side credentials| ERP
-    ERP --> DedicatedDB[(Dedicated organization ERP DB)]
+    Resolver -->|shared mode| SharedProfile
+    SharedProfile --> SharedDB[(Shared ERP DB)]
+    Resolver -->|dedicated mode| Binding
+    Secrets -->|server-side credentials| DedicatedDB[(Dedicated organization ERP DB)]
+    ERP -->|tenant queries| SharedDB
+    ERP -->|tenant queries| DedicatedDB
 ```
 
 ## Why this fits the repository
@@ -324,10 +326,10 @@ Every tenant data request should follow this sequence:
 3. Verify the token cryptographically.
 4. Obtain the signed organization_id.
 5. Confirm the token belongs to this ERP application.
-6. Resolve organization_id to the ERP binding.
-7. Confirm binding status is active.
-8. Resolve secret_ref using the ERP service identity.
-9. Reuse or create a bounded database connection pool.
+6. Resolve the organization’s trusted isolation mode.
+7. If `shared`, select the configured shared database pool/profile.
+8. If `dedicated`, resolve the organization binding and its `secret_ref` using the ERP service identity.
+9. Reuse or create a bounded connection pool for the selected data plane.
 10. Execute the request through the selected shared or dedicated data plane.
 ```
 
