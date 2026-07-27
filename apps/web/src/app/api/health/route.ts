@@ -1,14 +1,11 @@
 import { ping } from "@krazil-idp/db";
 
-export async function GET() {
-	try {
-		await ping();
-		return Response.json({ status: "ok", database: "up" });
-	} catch (error) {
-		console.error("healthcheck: database unreachable", error);
-		return Response.json(
-			{ status: "degraded", database: "down" },
-			{ status: 503 },
-		);
-	}
+import { healthResponse } from "./health-response";
+
+export function GET(): Promise<Response> {
+	return healthResponse({
+		ping,
+		createRequestId: () => crypto.randomUUID(),
+		logFailure: (event) => console.error(JSON.stringify(event)),
+	});
 }

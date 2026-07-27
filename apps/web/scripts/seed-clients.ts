@@ -63,6 +63,10 @@ async function seedClient(
 }
 
 const asJson = process.argv.includes("--json");
+if (asJson) {
+	// Keep stdout a strict machine channel; operational/audit logs remain visible on stderr.
+	console.log = (...data: unknown[]) => console.error(...data);
+}
 const headers = await adminHeaders();
 const results: SeedResult[] = [];
 for (const seed of clientSeeds) {
@@ -70,7 +74,7 @@ for (const seed of clientSeeds) {
 }
 
 if (asJson) {
-	console.log(JSON.stringify(results, null, 2));
+	process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
 } else {
 	for (const r of results) {
 		if (r.created) {

@@ -9,7 +9,7 @@ All actions below are security-sensitive. Record the operator, timestamp, affect
 3. Rotate:
 
    ```bash
-   bun --cwd apps/web run clients rotate <client_id>
+   bun run --cwd apps/web clients rotate <client_id>
    ```
 
 4. Store the new secret in the relying party's secret manager immediately. The CLI prints it once; the database stores only a hash.
@@ -25,7 +25,7 @@ Rotation through the plugin invalidates the old secret immediately for uncached 
 2. Disable it:
 
    ```bash
-   bun --cwd apps/web run clients disable <client_id>
+   bun run --cwd apps/web clients disable <client_id>
    ```
 
 3. Restart all IdP instances and confirm authorization/token requests fail.
@@ -33,7 +33,7 @@ Rotation through the plugin invalidates the old secret immediately for uncached 
 5. Re-enable only after remediation:
 
    ```bash
-   bun --cwd apps/web run clients enable <client_id>
+   bun run --cwd apps/web clients enable <client_id>
    ```
 
 Plugin 1.6.23 does not expose `disabled` in `adminUpdateOAuthClient`; the operator CLI updates the column directly and warns when a restart is required.
@@ -41,7 +41,7 @@ Plugin 1.6.23 does not expose `disabled` in `adminUpdateOAuthClient`; the operat
 ## Revoke one user's tokens and sessions
 
 ```bash
-bun --cwd apps/web run revoke-user <email>
+bun run --cwd apps/web revoke-user <email>
 ```
 
 This immediately:
@@ -71,7 +71,7 @@ global emergency fallback.
 ## Revoke one known JWT access token
 
 ```bash
-bun --cwd apps/web run revoke-token <jwt_access_token>
+bun run --cwd apps/web revoke-token <jwt_access_token>
 ```
 
 The CLI verifies the JWT signature, issuer, configured audience, expiration,

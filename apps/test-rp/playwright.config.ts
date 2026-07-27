@@ -3,19 +3,24 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
 
-function requiredEnv(key: string): string {
-	const value = process.env[key];
-	if (!value) throw new Error(`${key} is required in apps/test-rp/.env`);
-	return value;
-}
+import {
+	E2E_SERVER_URLS,
+	validatePlaywrightEnvironment,
+} from "../../scripts/test-environment";
 
+const validated = validatePlaywrightEnvironment(process.env);
 const rpDirectory = dirname(fileURLToPath(import.meta.url));
 const webDirectory = resolve(rpDirectory, "../web");
-const issuer = requiredEnv("OIDC_ISSUER");
-const rp1ClientId = requiredEnv("E2E_RP1_CLIENT_ID");
-const rp1ClientSecret = requiredEnv("E2E_RP1_CLIENT_SECRET");
-const rp2ClientId = requiredEnv("E2E_RP2_CLIENT_ID");
-const rp2ClientSecret = requiredEnv("E2E_RP2_CLIENT_SECRET");
+const issuer = validated.issuer.toString();
+const rp1ClientId = process.env.E2E_RP1_CLIENT_ID as string;
+const rp1ClientSecret = process.env.E2E_RP1_CLIENT_SECRET as string;
+const rp2ClientId = process.env.E2E_RP2_CLIENT_ID as string;
+const rp2ClientSecret = process.env.E2E_RP2_CLIENT_SECRET as string;
+const databaseEnvironment = {
+	TEST_DATABASE_ADMIN_URL: validated.database.adminUrl.toString(),
+	TEST_DATABASE_URL: validated.database.testUrl.toString(),
+	DATABASE_URL: validated.database.testUrl.toString(),
+};
 
 export default defineConfig({
 	testDir: "./tests",
@@ -25,7 +30,7 @@ export default defineConfig({
 	timeout: 45_000,
 	use: {
 		// E2E MUST remain localhost-only. Never point this at staging/production.
-		baseURL: "http://localhost:4101",
+		baseURL: E2E_SERVER_URLS.rpOne,
 		trace: "retain-on-failure",
 		screenshot: "only-on-failure",
 	},
@@ -33,14 +38,18 @@ export default defineConfig({
 		{
 			command: "bun run dev",
 			cwd: webDirectory,
-			url: "http://localhost:3000/api/health",
+			url: E2E_SERVER_URLS.idpHealth,
 			reuseExistingServer: false,
 			timeout: 120_000,
+			env: {
+				...process.env,
+				...databaseEnvironment,
+			},
 		},
 		{
 			command: "bun run server.ts",
 			cwd: rpDirectory,
-			url: "http://localhost:4101/",
+			url: E2E_SERVER_URLS.rpOne,
 			reuseExistingServer: false,
 			timeout: 60_000,
 			env: {
@@ -58,7 +67,7 @@ export default defineConfig({
 		{
 			command: "bun run server.ts",
 			cwd: rpDirectory,
-			url: "http://localhost:4102/",
+			url: E2E_SERVER_URLS.rpTwo,
 			reuseExistingServer: false,
 			timeout: 60_000,
 			env: {

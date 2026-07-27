@@ -71,8 +71,8 @@ Edit only `branding/clients.ts` for first-party clients. Replace the demo app na
 ```bash
 bun run db:start
 bun run db:push
-bun --cwd apps/web run seed:admin
-bun --cwd apps/web run seed:clients
+bun run --cwd apps/web seed:admin
+bun run --cwd apps/web seed:clients
 ```
 
 The operator must be explicitly provisioned by `seed:admin`; public signup cannot assign the `admin` role. `seed:clients` is idempotent by client name. Capture each `client_secret` once and store it in the relying party's secret manager. Do not put it in this repository.
@@ -87,7 +87,7 @@ bun install
 bun run db:migrate
 # Existing push-managed database: run `bun run db:baseline` once, then `bun run db:migrate`.
 bun run build
-bun --cwd apps/web run start
+bun run --cwd apps/web start
 ```
 
 Set the platform's HTTPS hostname as `BETTER_AUTH_URL`. Verify:

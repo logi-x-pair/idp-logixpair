@@ -1,19 +1,12 @@
 import type { FullConfig } from "@playwright/test";
 
+import { validateOidcIssuer } from "../../scripts/test-environment";
 import { decodeBase32Secret, generateTotpCode } from "./totp";
 
 function requiredEnv(key: string): string {
 	const value = process.env[key];
 	if (!value) throw new Error(`${key} is required in apps/test-rp/.env`);
 	return value;
-}
-
-function localIssuer(value: string): URL {
-	const url = new URL(value);
-	if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
-		throw new Error(`E2E refuses non-local OIDC_ISSUER: ${value}`);
-	}
-	return url;
 }
 
 function sessionCookies(response: Response): string {
@@ -92,7 +85,7 @@ async function provisionTwoFactorUser(issuer: URL): Promise<void> {
  * password; the setup never changes an existing user's password.
  */
 export default async function globalSetup(_config: FullConfig) {
-	const issuer = localIssuer(requiredEnv("OIDC_ISSUER"));
+	const issuer = validateOidcIssuer(requiredEnv("OIDC_ISSUER"));
 	const name = process.env.TEST_RP_USER_NAME ?? "E2E Test User";
 	const email = requiredEnv("TEST_RP_USER_EMAIL");
 	const password = requiredEnv("TEST_RP_USER_PASSWORD");

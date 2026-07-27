@@ -38,6 +38,7 @@
 		"db:watch": "turbo run db:watch -F @krazil-idp/db",
 		"db:stop": "turbo run db:stop -F @krazil-idp/db",
 		"db:down": "turbo run db:down -F @krazil-idp/db",
+		"test:safety": "bun test scripts/test-environment.test.ts apps/test-rp/e2e-bootstrap.test.ts apps/web/tests/health-route.test.ts apps/web/tests/console-mailer.test.ts",
 		"check": "biome check --write ."
 	},
 	"dependencies": {

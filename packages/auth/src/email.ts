@@ -25,14 +25,14 @@ export interface Mailer {
 }
 
 /**
- * Dev/test mailer: prints the message (including the token-bearing action
- * URL) instead of delivering it. NEVER used in production — token URLs in
- * logs are usable credentials.
+ * Dev/test mailer: prints a redacted message instead of delivering it. The
+ * action URL is intentionally removed because token-bearing URLs are usable
+ * credentials in logs. NEVER use this mailer in production.
  */
 export const consoleMailer: Mailer = {
 	send(message) {
 		console.log(
-			`[mail] to=${message.to} subject=${JSON.stringify(message.subject)}\n${message.text}`,
+			`[mail] to=${message.to} subject=${JSON.stringify(message.subject)}\n${message.text.replace(/https?:\/\/[^\s<]+/g, "[redacted action URL]")}`,
 		);
 		return Promise.resolve();
 	},

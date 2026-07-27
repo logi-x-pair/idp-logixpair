@@ -176,7 +176,7 @@ respectively. In `immediate` mode, make this check on every protected resource
 request. Fail closed if the status service is unavailable.
 
 The authenticated `/oauth2/revoke` endpoint and
-`bun --cwd apps/web run revoke-token <jwt_access_token>` verify the JWT
+`bun run --cwd apps/web revoke-token <jwt_access_token>` verify the JWT
 signature, issuer, audience, expiry, and `azp` ownership before storing its
 signed `jti`. The denylist is checked by OAuth introspection and
 `token-revocation-status`; raw JWKS verification cannot observe database

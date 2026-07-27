@@ -4,5 +4,13 @@
 		"types": ["bun"],
 		"noEmit": true
 	},
-	"include": ["server.ts", "playwright.config.ts", "tests/**/*.ts"]
+	"include": [
+		"server.ts",
+		"playwright.config.ts",
+		"global-setup.ts",
+		"e2e-bootstrap.ts",
+		"e2e-bootstrap.test.ts",
+		"tests/**/*.ts",
+		"../../scripts/test-environment.ts"
+	]
 }

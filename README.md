@@ -42,12 +42,13 @@ Open `http://localhost:3000`. The local issuer is `http://localhost:3000/api/aut
 
 The Docker database maps host port 5433 to PostgreSQL 5432. `POSTGRES_PASSWORD` is required by Compose and is read only from the untracked `packages/db/.env` or the shell environment.
 
-Health and handler smoke checks:
+Health smoke check:
 
 ```bash
 curl -i http://localhost:3000/api/health
-curl -i http://localhost:3000/api/auth/ok
 ```
+
+The readiness contract is HTTP 200 with `{"status":"ok","database":"up"}`. Database failure is HTTP 503 with `{"status":"degraded","database":"down"}`; the response and logs contain no connection details. There is no `/api/auth/ok` readiness endpoint.
 
 ## Environment
 
@@ -92,16 +93,16 @@ Regenerate a migration after a schema change with `bun run db:generate`.
 Operator and client scripts:
 
 ```bash
-bun --cwd apps/web run seed:admin
-bun --cwd apps/web run seed:user
-bun --cwd apps/web run seed:clients
-bun --cwd apps/web run clients list
-bun --cwd apps/web run clients rotate <client_id>
-bun --cwd apps/web run clients disable <client_id>
-bun --cwd apps/web run clients enable <client_id>
-bun --cwd apps/web run revoke-user <email>
-bun --cwd apps/web run revoke-token <jwt_access_token>
-bun --cwd apps/web run set-role <email> <admin|moderator|user>
+bun run --cwd apps/web seed:admin
+bun run --cwd apps/web seed:user
+bun run --cwd apps/web seed:clients
+bun run --cwd apps/web clients list
+bun run --cwd apps/web clients rotate <client_id>
+bun run --cwd apps/web clients disable <client_id>
+bun run --cwd apps/web clients enable <client_id>
+bun run --cwd apps/web revoke-user <email>
+bun run --cwd apps/web revoke-token <jwt_access_token>
+bun run --cwd apps/web set-role <email> <admin|moderator|user>
 ```
 
 `seed:admin` is deliberate and proves password ownership before assigning the server-only `admin` role. Public signup cannot set any role. `seed:clients` is idempotent by client name and prints a new client secret only at creation/rotation; store it immediately.
@@ -116,10 +117,10 @@ Role-based user administration is served by Better Auth's admin plugin under `/a
 
 Ban enforcement is IdP-wide, not just session-deep: banning revokes the user's sessions, all OAuth refresh tokens, and opaque access tokens in one transaction, blocks completion of a pending 2FA challenge, and the token endpoint refuses to issue tokens to a banned subject on any grant (JWT and opaque alike). One caveat: **already-issued JWT access tokens remain valid until `exp` for relying parties that only verify locally** — hybrid/immediate resource servers reject them immediately because the ban deleted the session (see INTEGRATION.md). Use `revoke-token` for a specific outstanding JWT.
 
-Assign roles with `bun --cwd apps/web run set-role <email> <role>` (refuses to demote the last admin) or, as an admin, via the `/admin/set-role` endpoint.
+Assign roles with `bun run --cwd apps/web set-role <email> <role>` (refuses to demote the last admin) or, as an admin, via the `/admin/set-role` endpoint.
 
 ```bash
-bun --cwd apps/web x auth@1.6.23 generate \
+bun x --cwd apps/web auth@1.6.23 generate \
 	--config ../../packages/auth/src/index.ts \
 	--output ../../packages/db/src/schema/auth.ts --yes
 ```
@@ -143,9 +144,9 @@ OAuth defaults stay secure: authorization code only, PKCE S256 only, exact redir
 ## Registering a first-party app
 
 1. Add one entry to `branding/clients.ts` with exact callback and post-logout URLs.
-2. Ensure the operator is provisioned: `bun --cwd apps/web run seed:admin`.
+2. Ensure the operator is provisioned: `bun run --cwd apps/web seed:admin`.
 3. Ensure the operator email is in `OAUTH_ADMIN_EMAILS`.
-4. Run `bun --cwd apps/web run seed:clients`.
+4. Run `bun run --cwd apps/web seed:clients`.
 5. Store each newly printed `client_secret` in the relying party's secret manager.
 6. Add stable trusted client IDs to `OAUTH_TRUSTED_CLIENT_IDS` only when you want plugin-level in-memory caching and CRUD locking.
 7. Restart/redeploy after changing trusted-client configuration.
@@ -157,30 +158,31 @@ Public clients use `type: "public"` and `token_endpoint_auth_method: "none"`; PK
 The protocol suite creates and destroys only `krazil_idp_test`:
 
 ```bash
-bun --cwd apps/web run test
+bun run --cwd apps/web test
 ```
 
-It covers authorization-code/token exchange, PKCE failure, bad redirect URI, expired code, refresh rotation, revocation, and introspection. The real browser verifier uses only localhost and provisions its configured test user idempotently:
+It covers authorization-code/token exchange, PKCE failure, bad redirect URI, expired code, refresh rotation, revocation, and introspection. The guarded browser verifier uses only localhost:
 
 ```bash
 cp apps/test-rp/.env.example apps/test-rp/.env
-# Set E2E_RP1_CLIENT_ID/SECRET and E2E_RP2_CLIENT_ID/SECRET from the
-# one-time output of the client seed command, plus TEST_RP_USER_EMAIL/PASSWORD.
-bun --cwd apps/web run seed:admin
-bun --cwd apps/web run seed:clients
-bun --cwd apps/test-rp run test:e2e
+# Set TEST_RP_USER_EMAIL/PASSWORD and OIDC_ISSUER in apps/test-rp/.env;
+# set the required IdP values and disposable database URLs in apps/web/.env.
+bun run --cwd apps/test-rp playwright install chromium
+bun run --cwd apps/test-rp test:e2e
 ```
 
-The test setup creates the `TEST_RP_USER_*` account through the localhost IdP
-when absent, or verifies its configured password when it already exists; it
-never changes an existing user's password. Playwright starts the IdP and both
-RP servers automatically. PostgreSQL must be running and the schema applied
-first. See `INTEGRATION.md` for the flow and `RUNBOOK.md` for operations.
+The E2E bootstrap validates the issuer, fixed localhost server URLs, and both
+disposable PostgreSQL URLs before any child process starts. It recreates only
+`krazil_idp_test`, passes that URL as `DATABASE_URL` to setup, seeding, the IdP,
+and every test child, then seeds fresh OAuth client credentials in memory before
+starting Playwright. It never stores or prints those credentials. PostgreSQL
+must be running locally. See `INTEGRATION.md` for the flow and `RUNBOOK.md` for
+operations.
 
 To exercise the opt-in 2FA continuation fixture, use a dedicated localhost database/account password of at least 12 characters and run:
 
 ```bash
-TWO_FACTOR_ENABLED=true bun --cwd apps/test-rp run test:e2e
+TWO_FACTOR_ENABLED=true bun run --cwd apps/test-rp test:e2e
 ```
 
 Enabled mode provisions a fresh disposable 2FA account, preserves the signed `oauth_query` through `/two-factor`, and proves RP1 and RP2 callbacks without another credential prompt. The default command keeps 2FA enrollment UI hidden and runs the existing smoke tests.
@@ -232,7 +234,7 @@ tokens. Raw JWKS verification cannot see this database state. The operator CLI
 accepts one verified JWT and performs the same denylist insert:
 
 ```bash
-bun --cwd apps/web run revoke-token <jwt_access_token>
+bun run --cwd apps/web revoke-token <jwt_access_token>
 ```
 
 The CLI is for a known single token and never prints the token. Use
