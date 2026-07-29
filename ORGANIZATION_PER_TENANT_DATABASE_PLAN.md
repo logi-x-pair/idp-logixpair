@@ -17,6 +17,17 @@ The intended product model is:
 
 This is an architecture plan, not an implementation checklist that has already been applied.
 
+## Clean parallel-development boundary
+
+The legacy `be-sso-logiXpair`/`fe-sso-logiXpair` stack remains the live development identity and tenant authority while this IdP and the ERP OIDC/control-plane integration are built separately. The two systems do not share identity data, organization IDs, memberships, sessions, password hashes, credential rows, or runtime routing state.
+
+- Do not edit, reconfigure, query from the new stack, shadow, dual-write, delete, or migrate the legacy SSO data during IdP-first work.
+- Start the new IdP from a clean control database. Manually create the two development accounts, organization, reviewed roles/memberships, and dedicated binding through new-system workflows.
+- Use new opaque user and organization IDs. Later cutover manually re-associates or recreates affected development ERP users; it does not introduce a legacy identity-map or compatibility verifier.
+- Re-enter approved database credentials directly through the future ERP-owned provisioning boundary. No migration utility reads or decrypts `UserTenantDatabases`, and no credential transits through IdP.
+- Keep the existing legacy-backed ERP release operational until the IdP-first readiness gate and exact cutover packet are explicitly approved. Then switch endpoints once; never use per-request shadow, dual-read, dual-write, or fallback authority.
+- Legacy data retention or deletion is a separate later decision. This plan does not authorize either.
+
 ## Executive decision
 
 Use a two-plane architecture with an explicit isolation mode for every organization:
@@ -43,7 +54,7 @@ Use a two-plane architecture with an explicit isolation mode for every organizat
 
 The ERP identifies a tenant from the verified token `organization_id` plus its fixed first-party application ID, queries only its separate ERP control database, and routes through that active control record. IdP binding metadata is used only for token issuance, provisioning correlation, and audit; it is never read in the ERP request-time data path. Before the deliberate full cutover, the target ERP control plane is isolated to fixtures; the legacy runtime remains untouched and is not shadowed or dual-routed.
 
-The first migration implements `dedicated` mode only. `shared` mode remains an intentional future design gated on organization columns, RLS, non-owner database roles, and cross-organization tests; it is not part of the initial cutover.
+The first cutover implements `dedicated` mode only. `shared` mode remains an intentional future design gated on organization columns, RLS, non-owner database roles, and cross-organization tests; it is not part of the initial cutover.
 
 ```mermaid
 flowchart LR
@@ -527,11 +538,11 @@ This architecture follows the authoritative phase gates in `.omx/plans/idp-full-
 - Replace the legacy SSO credential fetch, bulk preload, `currentActiveUserTenantId`, and default-database fallback outright.
 - Do not add a shadow, dual-read, or per-request legacy fallback mode.
 
-### Phases 6–8: ERP frontend, migration/cutover, and retirement
+### Phases 6–8: ERP frontend, clean cutover, and retirement
 
 - Replace the ERP frontend legacy login/context with the OIDC BFF session and organization selection flow.
-- Rehearse the complete new stack in isolated staging, then perform one approved maintenance-window cutover and reconciliation.
-- Remove legacy SSO APIs, keys, URL/API-key configuration, migration adapter, and repositories only after the approved rollback window.
+- Rehearse the complete independently provisioned new stack in isolated staging, then perform one approved endpoint cutover. Manually create/re-enter the small development identity, organization, membership, ERP association, and binding inputs; do not import or link legacy SSO rows.
+- Remove legacy SSO APIs, keys, URL/API-key configuration, and deployments only after the approved rollback window. Legacy data retention/deletion remains separately governed; no migration adapter exists.
 - Shared-mode implementation/RLS remains a separate future gate after the dedicated cutover.
 
 ### Verification
@@ -597,7 +608,7 @@ Keep the ERP platform responsible for:
 - credential ingress, validation, compare-and-swap rotation, and health;
 - database provisioning/migrations, bounded control/tenant pools, tenant data access, and recovery.
 
-Before the IdP-first gate, do not create or wire the ERP control schema/runtime. At the approved migration, replace the legacy resolver completely; do not maintain shadow, dual-read, default-database, or legacy SSO credential fallbacks.
+Before the IdP-first gate, do not create or wire the ERP control schema/runtime. At the approved cutover, replace the legacy resolver completely; do not maintain shadow, dual-read, default-database, or legacy SSO credential fallbacks.
 
 The most important invariant is:
 
