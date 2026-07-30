@@ -1,0 +1,84 @@
+{
+	"schemaVersion": 1,
+	"status": "blocked-until-provider-prerequisites-pass",
+	"seedKey": "logixpair-erp-web",
+	"name": "LogiXPair ERP",
+	"type": "confidential",
+	"tokenEndpointAuthMethod": "client_secret_basic",
+	"grantTypes": ["authorization_code", "refresh_token"],
+	"responseTypes": ["code"],
+	"scopes": [
+		"openid",
+		"profile",
+		"email",
+		"offline_access",
+		"erp:read",
+		"erp:write"
+	],
+	"requirePkce": true,
+	"pkceCodeChallengeMethod": "S256",
+	"skipConsent": true,
+	"enableEndSession": true,
+	"claimNamespace": "https://core.logixpair.com/claims",
+	"requiredClaims": [
+		"https://core.logixpair.com/claims/organization_id",
+		"https://core.logixpair.com/claims/organization_roles",
+		"https://core.logixpair.com/claims/platform_role"
+	],
+	"dashboard": {
+		"visible": true,
+		"requiresActiveOrganization": true
+	},
+	"environments": {
+		"local": {
+			"issuer": "http://localhost:3000/api/auth",
+			"resourceAudience": "http://localhost:8001",
+			"redirectUris": ["http://localhost:8001/api/auth/oidc/callback"],
+			"postLogoutRedirectUris": [
+				"http://localhost:8001/api/auth/oidc/post-logout"
+			],
+			"fixedFrontendReturn": "http://localhost:9001/",
+			"launchUrl": "http://localhost:8001/api/auth/oidc/login",
+			"clientId": null
+		},
+		"demo": {
+			"issuer": "https://core.demo.logixpair.com/api/auth",
+			"resourceAudience": "https://be.demo.logixpair.com",
+			"redirectUris": ["https://be.demo.logixpair.com/api/auth/oidc/callback"],
+			"postLogoutRedirectUris": [
+				"https://be.demo.logixpair.com/api/auth/oidc/post-logout"
+			],
+			"fixedFrontendReturn": "https://demo.logixpair.com/",
+			"launchUrl": "https://be.demo.logixpair.com/api/auth/oidc/login",
+			"clientId": null
+		},
+		"production": {
+			"issuer": "https://core.logixpair.com/api/auth",
+			"resourceAudience": "https://be.logixpair.com",
+			"redirectUris": ["https://be.logixpair.com/api/auth/oidc/callback"],
+			"postLogoutRedirectUris": [
+				"https://be.logixpair.com/api/auth/oidc/post-logout"
+			],
+			"fixedFrontendReturn": "https://app.logixpair.com/",
+			"launchUrl": "https://be.logixpair.com/api/auth/oidc/login",
+			"clientId": null
+		}
+	},
+	"secretPolicy": {
+		"committed": false,
+		"generatedSeparatelyPerEnvironment": true,
+		"storedOnlyByServerSideBff": true,
+		"browserAccessible": false
+	},
+	"registrationPrerequisites": [
+		"The pinned IdP provider advertises and authorizes erp:read and erp:write.",
+		"Organization-bound access-token claims and consent reference IDs are implemented and tested.",
+		"The environment-specific callback and post-logout routes exist in the ERP BFF.",
+		"The exact client registration packet receives its phase approval."
+	],
+	"notes": [
+		"This review manifest is not imported by branding/clients.ts and cannot seed a client.",
+		"The provider-generated client ID is captured once per environment and then treated as immutable.",
+		"No client secret belongs in this file or any source-controlled evidence."
+	]
+}

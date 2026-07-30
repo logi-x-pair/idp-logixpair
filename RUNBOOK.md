@@ -158,3 +158,31 @@ docker exec krazil-idp-postgres psql -U postgres -c 'DROP DATABASE krazil_idp_mi
 - Set `RATE_LIMIT_STORAGE=database` before running more than one instance;
   in-memory counters are per-process and reset on restart. The `rate_limit`
   table ships in migration `0003`.
+
+## Future ERP control-plane key custody
+
+This is a reviewed target contract, not an active IdP or legacy-SSO procedure. Do not create or mount the ERP key file, initialize the ERP control client, or change current ERP runtime behavior before the IdP-first gate and exact ERP change-packet approval.
+
+- `be-logiXpair` requires `ERP_CONTROL_KEY_FILE`; there is no default path and no key value may be supplied directly through an environment variable.
+- The deployment mounts one owner-readable key-ring file outside the repository and application image. On POSIX deployments it must be owned by the deployment account/root boundary with mode `0600` or stricter. The IdP, browser, frontend, legacy SSO, tenant database, logs, traces, and audit payloads must never receive the file or its contents.
+- The versioned key-ring format contains an allowlisted format version, one `activeKeyId`, and key IDs mapped to base64-encoded 32-byte AES keys. Startup rejects unknown fields, duplicate IDs, malformed base64, wrong key lengths, missing active keys, writable-by-group/world files, and empty key rings.
+- `key_id` and algorithm version are non-secret metadata. Ciphertext, nonce, and authentication tag remain separate envelope fields. Every envelope version uses a fresh random 96-bit nonce and exact AAD containing organization ID, application ID, binding ID, credential version, key ID, and algorithm version.
+- Rotation first mounts a key ring containing the old and new keys, reloads/restarts the approved ERP process, writes and validates a candidate envelope under the new key ID, and promotes it with expected-version compare-and-swap. A failed candidate never changes the active credential pointer.
+- Keep the prior key and envelope version for the approved rollback window. Remove a retired key only after every retained envelope has been re-encrypted or expired, rollback has closed, and a bounded control-database query proves no active/rollback-eligible envelope references it.
+- Missing/unreadable key file, unknown key ID, authentication-tag/AAD failure, control-database outage, or unhealthy binding fails closed. Never fall back to `DATABASE_URL`, legacy SSO credentials, another organization's key/envelope, or an unverified prior version.
+- Key-file access, reload, rotation, promotion, rollback, and retirement emit redacted operational and durable audit events containing IDs/status only—never key material, plaintext credentials, ciphertext, tags, connection strings, or private addresses.
+
+## Clean development cutover and rollback
+
+The legacy SSO remains the live development authority until the new IdP/ERP stack passes its readiness gate and the exact cutover packet is approved. No procedure in this runbook imports, links, deletes, or mutates legacy SSO rows.
+
+1. Build and verify the new IdP, ERP BFF, control database, provisioning boundary, and tenant resolver against isolated new-stack fixtures while the legacy-backed release continues serving development.
+2. Manually create the two new IdP users with new credentials, one new opaque organization, and reviewed platform/organization roles and memberships. Re-enter database credentials only through the ERP-side provisioning boundary.
+3. Register the environment-specific ERP confidential client only after `erp:read`/`erp:write`, organization claims, exact callbacks, and logout routes pass their phase tests.
+4. Before changing ERP `users.id_sso`, create a durable cutover journal in the same ERP transactional boundary. Each row records `cutover_id`, immutable ERP user ID, expected legacy SSO ID, new IdP ID, status, request ID, applied/restored timestamps, and the approving actor. It contains no password, token, session, email, or database credential.
+5. Lock each target ERP user row, require its current `id_sso` to equal the journaled legacy value, insert/update the journal row, conditionally set the new IdP ID, and require exactly one affected user row in one transaction. Any duplicate new ID, stale old ID, missing row, or partial count aborts the entire operation.
+6. Switch endpoints only after the journal transaction commits and the new login, organization selection, ERP authorization, tenant routing, and logout smoke checks pass. Do not shadow, dual-read, dual-write, or enable per-request fallback.
+7. Rollback first locks the same ERP user rows, requires each current `id_sso` to equal its journaled new IdP ID, restores the exact legacy ID, marks the journal restored, and requires exact affected-row counts in one transaction. Only after that transaction commits may the legacy-backed release and endpoints be restored.
+8. Redeploying the legacy release without restoring `id_sso` is an invalid rollback. Preserve the journal through the approved retention period; repeated apply/restore with the same `cutover_id` must be idempotent and conflicting values must fail closed.
+
+Legacy SSO data retention or deletion remains a separate future decision and requires explicit approval. Stopping or retiring the legacy runtime does not authorize deleting its database.
