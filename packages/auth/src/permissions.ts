@@ -4,6 +4,11 @@ import {
 	defaultStatements,
 	userAc,
 } from "better-auth/plugins/admin/access";
+import {
+	adminAc as organizationAdminAc,
+	defaultStatements as organizationDefaultStatements,
+	memberAc as organizationMemberAc,
+} from "better-auth/plugins/organization/access";
 
 /**
  * Operator access control for the admin plugin. Three roles:
@@ -47,10 +52,37 @@ export const roles = {
 	moderator: ac.newRole({
 		user: ["create", "list", "get", "update", "ban"],
 	}),
+	hr_user: ac.newRole({
+		user: ["create", "list", "get", "update"],
+	}),
 	user: ac.newRole(userAc.statements),
 };
 
+/**
+ * Organization permissions are separate from platform account permissions.
+ * Start from Better Auth's complete statement set so adding custom roles does
+ * not silently remove required organization/member/invitation actions.
+ */
+export const organizationAc = createAccessControl(organizationDefaultStatements);
+
+export const organizationRoles = {
+	admin: organizationAc.newRole(organizationAdminAc.statements),
+	// Member role changes, invitations, and profile fields are service-owned;
+	// Better Auth's generic member.update cannot express the display allowlist.
+	moderator: organizationAc.newRole({
+		member: ["delete"],
+		invitation: [],
+		team: [],
+		ac: ["read"],
+	}),
+	user: organizationAc.newRole(organizationMemberAc.statements),
+};
+
+export const ORGANIZATION_ROLES = ["admin", "moderator", "user"] as const;
+
+export type OrganizationRole = (typeof ORGANIZATION_ROLES)[number];
+
 /** Roles assignable through the set-role operator CLI. */
-export const ASSIGNABLE_ROLES = ["admin", "moderator", "user"] as const;
+export const ASSIGNABLE_ROLES = ["admin", "moderator", "hr_user", "user"] as const;
 
 export type OperatorRole = (typeof ASSIGNABLE_ROLES)[number];

@@ -329,6 +329,83 @@ const GUARDED_ADMIN_PATHS: Record<string, true> = {
 	"/admin/update-user": true,
 	"/admin/remove-user": true,
 };
+const ORGANIZATION_MUTATION_PATHS: Record<string, true> = {
+	"/organization/create": true,
+	"/organization/set-active": true,
+	"/organization/update": true,
+	"/organization/delete": true,
+	"/organization/add-member": true,
+	"/organization/remove-member": true,
+	"/organization/update-member-role": true,
+	"/organization/invite-member": true,
+	"/organization/cancel-invitation": true,
+	"/organization/accept-invitation": true,
+	"/organization/reject-invitation": true,
+	"/organization/leave": true,
+	"/organization/create-role": true,
+	"/organization/update-role": true,
+	"/organization/delete-role": true,
+};
+const PLATFORM_MUTATION_PATHS: Record<string, true> = {
+	"/admin/set-role": true,
+	"/admin/create-user": true,
+	"/admin/update-user": true,
+	"/admin/unban-user": true,
+	"/admin/ban-user": true,
+	"/admin/impersonate-user": true,
+	"/admin/stop-impersonating": true,
+	"/admin/revoke-user-session": true,
+	"/admin/revoke-user-sessions": true,
+	"/admin/remove-user": true,
+	"/admin/set-user-password": true,
+};
+
+/** Public admin mutations must use the transaction-owning account service. */
+export function platformMutationGuardPlugin(): BetterAuthPlugin {
+	return {
+		id: "platform-mutation-guard",
+		hooks: {
+			before: [
+				{
+					matcher: (ctx) => PLATFORM_MUTATION_PATHS[ctx.path ?? ""] === true,
+					handler: createAuthMiddleware(async (ctx) => {
+						if (!ctx.request) return;
+						throw new APIError("FORBIDDEN", {
+							message:
+								"Platform mutations require the server-side account service",
+						});
+					}),
+				},
+			],
+		},
+	};
+}
+
+/**
+ * Better Auth organization hooks are not a transaction boundary. Every
+ * Better Auth organization mutation path is therefore denied here, including
+ * no-Request server-only calls. Non-test server code must use the explicit
+ * transaction-owning policy services so writes and audit/outbox rows commit
+ * atomically.
+ */
+export function organizationMutationGuardPlugin(): BetterAuthPlugin {
+	return {
+		id: "organization-mutation-guard",
+		hooks: {
+			before: [
+				{
+					matcher: (ctx) => ORGANIZATION_MUTATION_PATHS[ctx.path ?? ""] === true,
+					handler: createAuthMiddleware(async () => {
+						throw new APIError("FORBIDDEN", {
+							message:
+								"Organization mutations require the server-side policy service",
+						});
+					}),
+				},
+			],
+		},
+	};
+}
 
 /**
  * Fields a non-admin operator (moderator) may pass to /admin/update-user.

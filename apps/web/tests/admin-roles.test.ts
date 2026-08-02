@@ -1,5 +1,11 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { auth } from "@krazil-idp/auth";
+import {
+	createPlatformUser,
+	deletePlatformUser,
+	setPlatformUserBan,
+	updatePlatformUserProfile,
+} from "@krazil-idp/auth/platform-account-service";
 import { db } from "@krazil-idp/db";
 import { oauthRefreshToken, session, user } from "@krazil-idp/db/schema/auth";
 import { and, eq, isNull } from "drizzle-orm";
@@ -15,6 +21,7 @@ let adminHeaders: Headers;
 let moderatorHeaders: Headers;
 let plainHeaders: Headers;
 let adminId: string;
+let moderatorId: string;
 let employeeId: string;
 let clientId: string;
 let clientSecret: string;
@@ -152,6 +159,7 @@ beforeAll(async () => {
 		"moderator",
 	);
 	moderatorHeaders = moderator.headers;
+	moderatorId = moderator.id;
 	const plain = await provision(
 		"Role Suite User",
 		`role-user-${runId}@example.com`,
@@ -200,12 +208,14 @@ beforeAll(async () => {
 
 describe("moderator role (CRU, no delete)", () => {
 	test("creates accounts but cannot grant roles at creation", async () => {
-		const created = await adminRequest("/admin/create-user", moderatorHeaders, {
+		const created = await createPlatformUser({
+			actorUserId: moderatorId,
+			requestId: `admin-test-create-${runId}`,
 			name: "Hired Employee",
 			email: `hired-${runId}@example.com`,
 			password,
 		});
-		expect(created.status).toBe(200);
+		expect(created.role).toBe("user");
 		const escalation = await adminRequest(
 			"/admin/create-user",
 			moderatorHeaders,
@@ -241,11 +251,13 @@ describe("moderator role (CRU, no delete)", () => {
 	});
 
 	test("updates allowlisted profile fields only", async () => {
-		const rename = await adminRequest("/admin/update-user", moderatorHeaders, {
-			userId: employeeId,
-			data: { name: "Employee Renamed" },
+		const rename = await updatePlatformUserProfile({
+			actorUserId: moderatorId,
+			targetUserId: employeeId,
+			name: "Employee Renamed",
+			requestId: `admin-test-profile-${runId}`,
 		});
-		expect(rename.status).toBe(200);
+		expect(rename.id).toBe(employeeId);
 
 		// Non-allowlisted fields are rejected even though the plugin's generic
 		// `update` permission would have forwarded them to the database.
@@ -306,17 +318,23 @@ describe("moderator role (CRU, no delete)", () => {
 	});
 
 	test("ban disables sign-in and revokes sessions; unban restores access", async () => {
-		const banned = await adminRequest("/admin/ban-user", moderatorHeaders, {
-			userId: employeeId,
+		const banned = await setPlatformUserBan({
+			actorUserId: moderatorId,
+			targetUserId: employeeId,
+			banned: true,
 			banReason: "Offboarding hold",
+			requestId: `admin-test-ban-${runId}`,
 		});
-		expect(banned.status).toBe(200);
+		expect(banned.banned).toBe(true);
 		expect(await signInStatus(employeeEmail)).toBe(403);
 
-		const unbanned = await adminRequest("/admin/unban-user", moderatorHeaders, {
-			userId: employeeId,
+		const unbanned = await setPlatformUserBan({
+			actorUserId: moderatorId,
+			targetUserId: employeeId,
+			banned: false,
+			requestId: `admin-test-unban-${runId}`,
 		});
-		expect(unbanned.status).toBe(200);
+		expect(unbanned.banned).toBe(false);
 		expect(await signInStatus(employeeEmail)).toBe(200);
 	});
 
@@ -401,10 +419,12 @@ describe("role boundaries", () => {
 			`disposable-${runId}@example.com`,
 			"user",
 		);
-		const removed = await adminRequest("/admin/remove-user", adminHeaders, {
-			userId: disposable.id,
+		const removed = await deletePlatformUser({
+			actorUserId: adminId,
+			targetUserId: disposable.id,
+			requestId: `admin-test-delete-${runId}`,
 		});
-		expect(removed.status).toBe(200);
+		expect(removed.id).toBe(disposable.id);
 		const gone = await db
 			.select({ id: user.id })
 			.from(user)
@@ -446,11 +466,14 @@ describe("ban enforcement across the OAuth surface", () => {
 		const verifier2 = `${verifier}-second`;
 		const preBanCode = await authorizeCode(worker.headers, verifier2);
 
-		const banned = await adminRequest("/admin/ban-user", moderatorHeaders, {
-			userId: worker.id,
+		const banned = await setPlatformUserBan({
+			actorUserId: moderatorId,
+			targetUserId: worker.id,
+			banned: true,
 			banReason: "offboarded",
+			requestId: `admin-test-oauth-ban-${runId}`,
 		});
-		expect(banned.status).toBe(200);
+		expect(banned.banned).toBe(true);
 
 		// The refresh grant never consults `banned` upstream; the ban hook must
 		// have revoked every refresh token.
@@ -573,11 +596,14 @@ describe("ban enforcement across the OAuth surface", () => {
 		expect(challenge.response?.twoFactorRedirect).toBe(true);
 		const challengeHeaders = cookieHeaders(challenge.headers);
 
-		const banned = await adminRequest("/admin/ban-user", moderatorHeaders, {
-			userId: targetId,
+		const banned = await setPlatformUserBan({
+			actorUserId: moderatorId,
+			targetUserId: targetId,
+			banned: true,
 			banReason: "banned mid-challenge",
+			requestId: `admin-test-2fa-ban-${runId}`,
 		});
-		expect(banned.status).toBe(200);
+		expect(banned.banned).toBe(true);
 
 		// A VALID TOTP after the ban must not mint a session.
 		const completion = await auth.handler(

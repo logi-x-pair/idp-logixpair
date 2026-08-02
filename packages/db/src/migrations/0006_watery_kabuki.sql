@@ -1,0 +1,2 @@
+ALTER TABLE "organization" ADD COLUMN "status" text DEFAULT 'active' NOT NULL;--> statement-breakpoint
+ALTER TABLE "organization" ADD CONSTRAINT "organization_status_check" CHECK ("organization"."status" in ('active', 'suspended', 'archived'));

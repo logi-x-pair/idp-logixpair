@@ -1,5 +1,6 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { twoFactorClient } from "better-auth/client/plugins";
+import { organizationAc, organizationRoles } from "@krazil-idp/auth/permissions";
+import { organizationClient, twoFactorClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({
@@ -7,6 +8,7 @@ export const authClient = createAuthClient({
 	// request, including the 2FA verification POSTs.
 	plugins: [
 		oauthProviderClient(),
+		organizationClient({ ac: organizationAc, roles: organizationRoles }),
 		twoFactorClient({
 			onTwoFactorRedirect() {
 				// Keep the signed authorization query intact while the user completes

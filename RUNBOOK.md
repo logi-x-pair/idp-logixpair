@@ -119,6 +119,24 @@ Investigate credential stuffing by email and source IP. Do not manually clear a 
 
 The account lockout budget allows five failed TOTP/backup-code attempts and then applies the configured 15-minute lockout. A user can recover with one unused backup code after the lock expires, or an operator can follow the verified account-recovery process outside this application. Noninteractive CLI scripts refuse an enrolled admin's `twoFactorRedirect`; keep a dedicated non-2FA bootstrap operator for automation.
 
+## Organization policy service smoke
+
+The transaction-owned organization lifecycle, membership, invitation, and audit
+boundaries are exercised only against the disposable loopback test database.
+Before running either command, the test runner verifies `localhost:5433` and
+`krazil_idp_test`, recreates that disposable database, pushes the current schema
+with `drizzle-kit push --force`, and refuses an unsafe target:
+
+```bash
+bun run --cwd apps/web test tests/organization-lifecycle-boundaries.test.ts
+bun run --cwd apps/web test tests/organization-invitation-audit.test.ts
+```
+
+The smoke covers organization creation/status/profile access, role hierarchy,
+last-admin and lock-order concurrency, invitations, JSONB audit metadata reads,
+scoped audit access, and delivered-only retention. Do not point these commands
+at development, staging, production, or a shared database.
+
 ## Audit events
 
 The auth hook emits structured JSON for login (including `login.two_factor_failure`), token issuance/revocation, OAuth client create/update/delete and secret rotation, and consent grant/deny/revoke. Ship stdout to the production logging/SIEM pipeline. Audit records must not contain passwords, client secrets, tokens, authorization codes, or token-bearing email URLs.

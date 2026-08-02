@@ -1,12 +1,13 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { branding } from "@krazil-idp/branding/config";
 import { createDb } from "@krazil-idp/db";
-import * as schema from "@krazil-idp/db/schema/auth";
+import * as schema from "@krazil-idp/db/schema";
 import { env } from "@krazil-idp/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins/admin";
+import { organization } from "better-auth/plugins/organization";
 import { jwt } from "better-auth/plugins/jwt";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { audit } from "./audit";
@@ -16,9 +17,17 @@ import {
 	banEnforcementPlugin,
 	IP_ADDRESS_HEADERS,
 	lockoutGuard,
+	organizationMutationGuardPlugin,
+	platformMutationGuardPlugin,
 	securityAuditPlugin,
 } from "./guards";
-import { ac, roles } from "./permissions";
+import { organizationHooks } from "./organization-policy";
+import {
+	ac,
+	organizationAc,
+	organizationRoles,
+	roles,
+} from "./permissions";
 import { revocationStatus } from "./revocation-status";
 import { SCOPE_EXPIRATIONS, TOKEN_LIFETIMES } from "./token-config";
 
@@ -130,6 +139,17 @@ export function createAuth() {
 				defaultRole: "user",
 				adminRoles: ["admin"],
 			}),
+			organization({
+				ac: organizationAc,
+				roles: organizationRoles,
+				allowUserToCreateOrganization: false,
+				creatorRole: "admin",
+				disableOrganizationDeletion: true,
+				organizationHooks,
+			}),
+			// Public organization mutations require the transaction-owning policy service.
+			organizationMutationGuardPlugin(),
+			platformMutationGuardPlugin(),
 			// Non-admin operators: admin-target protection + update field allowlist.
 			adminTargetGuardPlugin(),
 			// Bans must kill OAuth tokens too, not just sessions (see guards.ts).
