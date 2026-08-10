@@ -28,7 +28,7 @@ async function resolveInvitation(
 	const eventType =
 		resolution === "accepted"
 			? "admin.member.added"
-			: "admin.member.invitation_cancelled";
+			: "admin.member.invitation_rejected";
 	const result: OperationResult<OrganizationInvitation> = await db.transaction(
 		async (transaction): Promise<OperationResult<OrganizationInvitation>> => {
 			const references = await transaction
@@ -53,7 +53,12 @@ async function resolveInvitation(
 				.where(eq(organization.id, organizationId))
 				.for("update");
 			const actors = await transaction
-				.select({ id: user.id, email: user.email, banned: user.banned })
+				.select({
+					id: user.id,
+					email: user.email,
+					emailVerified: user.emailVerified,
+					banned: user.banned,
+				})
 				.from(user)
 				.where(eq(user.id, input.actorUserId))
 				.for("update");
@@ -88,6 +93,7 @@ async function resolveInvitation(
 			}
 			if (
 				organizations[0]?.status !== "active" ||
+				actor.emailVerified !== true ||
 				actor.email.toLowerCase() !== pending.email.toLowerCase()
 			) {
 				return denied(

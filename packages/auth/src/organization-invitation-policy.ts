@@ -85,6 +85,7 @@ export async function denyOrganizationInvitation<T>(
 	eventType:
 		| "admin.member.invited"
 		| "admin.member.invitation_cancelled"
+		| "admin.member.invitation_rejected"
 		| "admin.member.added",
 	code: "POLICY_DENIED" | "NOT_FOUND" | "CONFLICT" | "INVALID_INPUT",
 	message: string,

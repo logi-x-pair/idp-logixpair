@@ -52,6 +52,18 @@ async function provision(name: string, role = "user"): Promise<TestUser> {
 	return { id, email };
 }
 
+async function provisionUnverified(name: string): Promise<TestUser> {
+	const email = `${name}-${runId}@example.com`;
+	await auth.api.signUpEmail({ body: { name, email, password } });
+	const rows = await db
+		.select({ id: user.id })
+		.from(user)
+		.where(eq(user.email, email));
+	const id = rows[0]?.id;
+	if (!id) throw new Error("Unverified invitation fixture was not created");
+	return { id, email };
+}
+
 function requestId(label: string): string {
 	return `invitation-${label}-${runId}`;
 }
@@ -149,6 +161,7 @@ describe("organization invitation boundaries", () => {
 				invitationId: created.id,
 				requestId: requestId("email-mismatch"),
 			}),
+
 			"POLICY_DENIED",
 		);
 		expect(
@@ -160,6 +173,33 @@ describe("organization invitation boundaries", () => {
 				})
 			).status,
 		).toBe("rejected");
+	});
+	test("invitation acceptance requires verified email ownership", async () => {
+		const unverified = await provisionUnverified("invitation-unverified");
+		const organization = await createTestOrganization(
+			organizationAdmin,
+			"unverified-email",
+		);
+		const created = await inviteOrganizationMember({
+			actorUserId: organizationAdmin.id,
+			organizationId: organization.id,
+			email: unverified.email,
+			role: "user",
+			requestId: requestId("unverified-invite"),
+		});
+		await expectOrganizationPolicyCode(
+			acceptOrganizationInvitation({
+				actorUserId: unverified.id,
+				invitationId: created.id,
+				requestId: requestId("unverified-accept"),
+			}),
+			"POLICY_DENIED",
+		);
+		const pending = await db
+			.select({ status: invitation.status })
+			.from(invitation)
+			.where(eq(invitation.id, created.id));
+		expect(pending).toEqual([{ status: "pending" }]);
 	});
 
 	test("only organization admins cancel invitations and expired invitations stay unusable", async () => {

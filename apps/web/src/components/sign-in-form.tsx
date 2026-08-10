@@ -4,16 +4,21 @@ import { Button } from "@krazil-idp/ui/components/button";
 import { Input } from "@krazil-idp/ui/components/input";
 import { Label } from "@krazil-idp/ui/components/label";
 import { useForm } from "@tanstack/react-form";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import z from "zod";
-
 import { authClient } from "@/lib/auth-client";
 import { inOAuthFlow, withCurrentQuery } from "@/lib/oauth-flow";
+import type { SafeReturnPath } from "@/lib/server/session";
 
 import Loader from "./loader";
 
-export default function SignInForm() {
+export default function SignInForm({
+	postSignInPath,
+}: {
+	postSignInPath?: SafeReturnPath;
+}) {
 	const router = useRouter();
 	const { isPending } = authClient.useSession();
 	const [serverError, setServerError] = useState<string | null>(null);
@@ -38,7 +43,7 @@ export default function SignInForm() {
 						// flow automatically once the session exists — never redirect
 						// manually there.
 						if (!inOAuthFlow()) {
-							router.push("/dashboard");
+							router.push((postSignInPath ?? "/") as Route);
 						}
 					},
 					onError: (error) => {

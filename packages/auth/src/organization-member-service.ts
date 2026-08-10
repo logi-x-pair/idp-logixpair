@@ -61,7 +61,7 @@ async function lockMutationContext(
 
 	const userIds = [...new Set([input.actorUserId, targetUserId])].sort();
 	const users = await transaction
-		.select({ id: user.id, banned: user.banned })
+		.select({ id: user.id, role: user.role, banned: user.banned })
 		.from(user)
 		.where(inArray(user.id, userIds))
 		.orderBy(user.id)
@@ -107,10 +107,13 @@ function contextDenial(
 	if (!context.targetUser || !context.targetMember) {
 		return { code: "NOT_FOUND", message: "Organization member was not found" };
 	}
-	if (!context.actorUser || !context.actorMember) {
+	if (
+		!context.actorUser ||
+		(context.actorUser.role !== "admin" && !context.actorMember)
+	) {
 		return {
 			code: "POLICY_DENIED",
-			message: "Actor is not an organization member",
+			message: "Actor is not authorized for this organization",
 		};
 	}
 	if (context.actorUser.banned === true) {
@@ -125,9 +128,11 @@ function roleChangeDenial(
 	context: LockedMutationContext,
 	input: ChangeOrganizationMemberRoleInput,
 ): PolicyDenial | undefined {
-	const actor = context.actorMember as LockedMember;
+	const actor = context.actorMember as LockedMember | undefined;
 	const target = context.targetMember as LockedMember;
-	if (!hasRole(actor, "admin")) {
+	const canChangeRole =
+		context.actorUser?.role === "admin" || (actor && hasRole(actor, "admin"));
+	if (!canChangeRole) {
 		return {
 			code: "POLICY_DENIED",
 			message: "Only organization admins may change member roles",
@@ -152,11 +157,13 @@ function removeDenial(
 	context: LockedMutationContext,
 	input: RemoveOrganizationMemberInput,
 ): PolicyDenial | undefined {
-	const actor = context.actorMember as LockedMember;
+	const actor = context.actorMember as LockedMember | undefined;
 	const target = context.targetMember as LockedMember;
 	const actorCanRemove =
-		hasRole(actor, "admin") ||
-		(hasRole(actor, "moderator") && hasRole(target, "user"));
+		context.actorUser?.role === "admin" ||
+		(actor &&
+			(hasRole(actor, "admin") ||
+				(hasRole(actor, "moderator") && hasRole(target, "user"))));
 	if (!actorCanRemove) {
 		return {
 			code: "POLICY_DENIED",

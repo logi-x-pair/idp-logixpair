@@ -7,7 +7,11 @@ import { type NextRequest, NextResponse } from "next/server";
  * keeps the relaxed CSP from next.config.ts (HMR needs 'unsafe-eval').
  */
 export default function proxy(request: NextRequest) {
-	if (process.env.NODE_ENV !== "production") return NextResponse.next();
+	const requestHeaders = new Headers(request.headers);
+	requestHeaders.set("x-pathname", request.nextUrl.pathname);
+	if (process.env.NODE_ENV !== "production") {
+		return NextResponse.next({ request: { headers: requestHeaders } });
+	}
 	const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 	const csp = [
 		"default-src 'self'",
@@ -18,7 +22,6 @@ export default function proxy(request: NextRequest) {
 		"base-uri 'self'",
 		"form-action 'self'",
 	].join("; ");
-	const requestHeaders = new Headers(request.headers);
 	requestHeaders.set("x-nonce", nonce);
 	requestHeaders.set("Content-Security-Policy", csp);
 	const response = NextResponse.next({ request: { headers: requestHeaders } });

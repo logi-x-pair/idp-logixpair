@@ -118,16 +118,22 @@ export default function ConsentForm() {
 			<p className="mt-4 text-sm">
 				<span className="font-medium">{clientName}</span> wants to:
 			</p>
-			<ul className="mt-3 space-y-2">
-				{scopes.map((scope) => (
-					<li key={scope} className="flex items-start gap-2 text-sm">
-						<span aria-hidden className="mt-0.5 text-[var(--brand-accent)]">
-							•
-						</span>
-						{SCOPE_DESCRIPTIONS[scope] ?? scope}
-					</li>
-				))}
-			</ul>
+			{scopes.length === 0 ? (
+				<p className="mt-3 text-muted-foreground text-sm">
+					No account permissions were requested.
+				</p>
+			) : (
+				<ul className="mt-3 space-y-2">
+					{scopes.map((scope) => (
+						<li key={scope} className="flex items-start gap-2 text-sm">
+							<span aria-hidden className="mt-0.5 text-[var(--brand-accent)]">
+								•
+							</span>
+							{SCOPE_DESCRIPTIONS[scope] ?? scope}
+						</li>
+					))}
+				</ul>
+			)}
 
 			<div className="mt-8 flex gap-3">
 				<Button

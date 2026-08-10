@@ -3,6 +3,7 @@ import { branding } from "@krazil-idp/branding/config";
 import { createDb } from "@krazil-idp/db";
 import * as schema from "@krazil-idp/db/schema";
 import { env } from "@krazil-idp/env/server";
+import { and, eq } from "drizzle-orm";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
@@ -22,12 +23,7 @@ import {
 	securityAuditPlugin,
 } from "./guards";
 import { organizationHooks } from "./organization-policy";
-import {
-	ac,
-	organizationAc,
-	organizationRoles,
-	roles,
-} from "./permissions";
+import { ac, organizationAc, organizationRoles, roles } from "./permissions";
 import { revocationStatus } from "./revocation-status";
 import { SCOPE_EXPIRATIONS, TOKEN_LIFETIMES } from "./token-config";
 
@@ -172,6 +168,36 @@ export function createAuth() {
 			oauthProvider({
 				loginPage: "/sign-in",
 				consentPage: "/consent",
+				postLogin: {
+					page: "/organizations",
+					shouldRedirect: async ({ user, session }) => {
+						const activeOrganizationId = session.activeOrganizationId;
+						const activeMemberships = await db
+							.select({ organizationId: schema.member.organizationId })
+							.from(schema.member)
+							.innerJoin(
+								schema.organization,
+								eq(schema.organization.id, schema.member.organizationId),
+							)
+							.where(
+								and(
+									eq(schema.member.userId, user.id),
+									eq(schema.organization.status, "active"),
+								),
+							)
+							.limit(101);
+						if (
+							typeof activeOrganizationId === "string" &&
+							activeMemberships.some(
+								(row) => row.organizationId === activeOrganizationId,
+							)
+						) {
+							return false;
+						}
+						return activeMemberships.length > 0;
+					},
+					consentReferenceId: async () => undefined,
+				},
 				signUp: {
 					page: "/sign-up",
 				},

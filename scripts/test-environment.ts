@@ -206,6 +206,19 @@ function validateHarnessCredentials(environment: Environment): void {
 	}
 }
 
+/**
+ * Fail-closed guard for scripts that provision fixture accounts with known
+ * passwords: refuses to run unless the DATABASE_URL actually consumed by
+ * @krazil-idp/db targets the dedicated loopback disposable database.
+ */
+export function assertDisposableDatabaseTarget(environment: Environment): URL {
+	return validatePostgresUrl(
+		required(environment, "DATABASE_URL"),
+		"DATABASE_URL",
+		TEST_DATABASE_NAME,
+	);
+}
+
 export function validateE2EEnvironment(
 	environment: Environment,
 ): ValidatedE2EEnvironment {

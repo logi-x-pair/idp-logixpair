@@ -12,6 +12,7 @@ import {
 	removeOrganizationMember,
 } from "@krazil-idp/auth/organization-member-service";
 import { addOrganizationMember } from "@krazil-idp/auth/organization-membership-service";
+import { setActiveOrganization } from "@krazil-idp/auth/organization-selection-service";
 import { organizationRoles } from "@krazil-idp/auth/permissions";
 import {
 	changePlatformRole,
@@ -24,7 +25,7 @@ import {
 	adminAuditEvent,
 	adminAuditOutbox,
 } from "@krazil-idp/db/schema/admin-audit";
-import { user } from "@krazil-idp/db/schema/auth";
+import { session as authSession, user } from "@krazil-idp/db/schema/auth";
 import {
 	invitation,
 	member,
@@ -189,6 +190,28 @@ describe("organization plugin foundation", () => {
 		expect(memberships).toEqual([{ role: "admin" }]);
 	});
 
+	test("activates an authorized organization on the exact session", async () => {
+		const sessions = await db
+			.select({ id: authSession.id })
+			.from(authSession)
+			.where(eq(authSession.userId, adminId));
+		const currentSession = sessions[0];
+		if (!currentSession)
+			throw new Error("Activation session fixture was not found");
+
+		await setActiveOrganization({
+			actorUserId: adminId,
+			sessionId: currentSession.id,
+			organizationId,
+			requestId: `phase1-activate-${runId}`,
+		});
+		const updated = await db
+			.select({ activeOrganizationId: authSession.activeOrganizationId })
+			.from(authSession)
+			.where(eq(authSession.id, currentSession.id));
+		expect(updated).toEqual([{ activeOrganizationId: organizationId }]);
+	});
+
 	test("blocks raw HTTP organization and platform mutations", async () => {
 		const headers = new Headers({
 			cookie: adminHeaders.get("cookie") ?? "",
@@ -209,6 +232,7 @@ describe("organization plugin foundation", () => {
 			}),
 		);
 		for (const path of [
+			"/organization/set-active",
 			"/organization/remove-member",
 			"/organization/update-member-role",
 			"/organization/invite-member",

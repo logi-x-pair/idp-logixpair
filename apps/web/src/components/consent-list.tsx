@@ -3,8 +3,11 @@
 import { Button } from "@krazil-idp/ui/components/button";
 import { useCallback, useEffect, useState } from "react";
 
+import { initialActionState } from "@/lib/action-state";
 import { authClient } from "@/lib/auth-client";
 import { SCOPE_DESCRIPTIONS } from "@/lib/scope-descriptions";
+
+import ActionFeedback from "./action-feedback";
 
 interface Consent {
 	id: string;
@@ -18,16 +21,17 @@ interface Consent {
 export default function ConsentList() {
 	const [consents, setConsents] = useState<Consent[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [feedback, setFeedback] = useState(initialActionState);
 	// Revocation is a two-step, per-row confirmation: the first click arms the
 	// row (confirmingId), the second click actually revokes.
 	const [confirmingId, setConfirmingId] = useState<string | null>(null);
 	const [revoking, setRevoking] = useState(false);
 
-	const load = useCallback(async () => {
+	const load = useCallback(async (): Promise<boolean> => {
 		const { data, error: listError } = await authClient.oauth2.getConsents();
 		if (listError || !data) {
 			setError("Couldn't load your connected applications.");
-			return;
+			return false;
 		}
 		const rows = (data as Consent[] | null) ?? [];
 		// Resolve client display names for each consent.
@@ -40,6 +44,7 @@ export default function ConsentList() {
 			}),
 		);
 		setConsents(withNames);
+		return true;
 	}, []);
 
 	useEffect(() => {
@@ -47,8 +52,12 @@ export default function ConsentList() {
 	}, [load]);
 
 	const revoke = async (id: string) => {
+		const revokedClientName =
+			consents?.find((consent) => consent.id === id)?.clientName ??
+			"this application";
 		setRevoking(true);
 		setError(null);
+		setFeedback(initialActionState);
 		try {
 			const { error: revokeError } = await authClient.oauth2.deleteConsent({
 				id,
@@ -57,7 +66,16 @@ export default function ConsentList() {
 				setError("Couldn't revoke access. Try again.");
 				return;
 			}
-			await load();
+			const refreshed = await load();
+			// Report success only after the list actually refreshed; otherwise a
+			// failed reload would keep the revoked row visible next to a success
+			// message. load() already surfaced the load error.
+			if (refreshed) {
+				setFeedback({
+					status: "success",
+					message: `Access revoked for ${revokedClientName}.`,
+				});
+			}
 		} catch {
 			setError("Couldn't revoke access. Try again.");
 		} finally {
@@ -78,9 +96,12 @@ export default function ConsentList() {
 	}
 	if (consents.length === 0) {
 		return (
-			<p className="text-muted-foreground text-sm">
-				You haven't granted any applications access to your account.
-			</p>
+			<div>
+				<p className="text-muted-foreground text-sm">
+					You haven't granted any applications access to your account.
+				</p>
+				<ActionFeedback state={feedback} />
+			</div>
 		);
 	}
 
@@ -142,6 +163,7 @@ export default function ConsentList() {
 					);
 				})}
 			</ul>
+			<ActionFeedback state={feedback} />
 		</div>
 	);
 }

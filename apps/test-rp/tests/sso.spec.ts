@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { generateTotpCode } from "../totp";
 
 const email = process.env.TEST_RP_USER_EMAIL;
@@ -14,6 +14,24 @@ if (!email || !password) {
 	);
 }
 
+async function completeOrganizationSelection(
+	page: Page,
+	rpUrl: string,
+): Promise<void> {
+	const targetUrl = new URL(rpUrl);
+	await page.waitForURL(
+		(url) =>
+			(url.origin === targetUrl.origin &&
+				url.pathname === targetUrl.pathname) ||
+			(url.origin === "http://localhost:3000" &&
+				url.pathname === "/organizations"),
+		{ timeout: 15_000 },
+	);
+	if (!page.url().includes("localhost:3000/organizations")) return;
+	await page.getByRole("button", { name: "Set active" }).first().click();
+	await expect(page).toHaveURL(rpUrl, { timeout: 15_000 });
+}
+
 test("RP1 login -> tokens -> RP2 silent SSO -> refresh -> coordinated logout", async ({
 	page,
 }) => {
@@ -23,6 +41,7 @@ test("RP1 login -> tokens -> RP2 silent SSO -> refresh -> coordinated logout", a
 	await page.getByLabel("Email").fill(email);
 	await page.getByLabel("Password").fill(password);
 	await page.getByRole("button", { name: "Sign in" }).click();
+	await completeOrganizationSelection(page, "http://localhost:4101/");
 
 	await expect(page).toHaveURL("http://localhost:4101/");
 	await expect(page.getByText("Signed in.", { exact: false })).toBeVisible();
@@ -77,6 +96,7 @@ test("resource authorization follows mode after IdP session termination", async 
 	await page.getByLabel("Email").fill(email as string);
 	await page.getByLabel("Password").fill(password as string);
 	await page.getByRole("button", { name: "Sign in" }).click();
+	await completeOrganizationSelection(page, "http://localhost:4101/");
 	await expect(page).toHaveURL("http://localhost:4101/");
 
 	await page.goto("http://localhost:4101/me");
@@ -186,6 +206,7 @@ test("consent screen rejects links without signed query material", async ({
 	await page.getByLabel("Email").fill(email);
 	await page.getByLabel("Password").fill(password);
 	await page.getByRole("button", { name: "Sign in" }).click();
+	await completeOrganizationSelection(page, "http://localhost:4101/");
 	await expect(page).toHaveURL("http://localhost:4101/");
 
 	// A bare consent link carrying a client_id but no signed query material

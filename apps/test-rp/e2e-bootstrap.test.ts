@@ -42,6 +42,20 @@ const SEEDED_CLIENTS = JSON.stringify([
 	},
 ]);
 
+const SEEDED_PHASE2_MATRIX = JSON.stringify({
+	password: "phase2-fixture-password-2026",
+	orgId: "phase2-matrix-org-id",
+	secondOrgId: "phase2-second-org-id",
+	orgAdminEmail: "phase2-org-admin@localhost.test",
+	orgModEmail: "phase2-org-mod@localhost.test",
+	orgMemberEmail: "phase2-org-member@localhost.test",
+	invitedEmail: "phase2-invited@localhost.test",
+	invitationId: "phase2-invitation-id",
+	platformModEmail: "phase2-platform-mod@localhost.test",
+	platformHrEmail: "phase2-platform-hr@localhost.test",
+	banTargetEmail: "phase2-ban-target@localhost.test",
+});
+
 describe("guarded E2E bootstrap", () => {
 	test.each([
 		{
@@ -110,8 +124,11 @@ describe("guarded E2E bootstrap", () => {
 		const runner: HarnessCommandRunner = async (command, environment) => {
 			commands.push(command);
 			environments.push(environment);
-			return command.label === "Disposable OAuth client seed"
-				? SEEDED_CLIENTS
+			if (command.label === "Disposable OAuth client seed") {
+				return SEEDED_CLIENTS;
+			}
+			return command.label === "Disposable Phase 2 matrix seed"
+				? SEEDED_PHASE2_MATRIX
 				: "";
 		};
 
@@ -121,6 +138,7 @@ describe("guarded E2E bootstrap", () => {
 			"Disposable database setup",
 			"Disposable admin seed",
 			"Disposable OAuth client seed",
+			"Disposable Phase 2 matrix seed",
 			"Playwright E2E",
 		]);
 		for (const environment of environments) {
@@ -131,14 +149,16 @@ describe("guarded E2E bootstrap", () => {
 			);
 		}
 		const firstEnvironment = environments[0];
-		const playwrightEnvironment = environments[3];
+		const playwrightEnvironment = environments[4];
 		const adminSeedCommand = commands[1];
 		const clientSeedCommand = commands[2];
+		const matrixSeedCommand = commands[3];
 		if (
 			!firstEnvironment ||
 			!playwrightEnvironment ||
 			!adminSeedCommand ||
-			!clientSeedCommand
+			!clientSeedCommand ||
+			!matrixSeedCommand
 		) {
 			throw new Error("E2E bootstrap did not run the expected child commands");
 		}
@@ -147,6 +167,40 @@ describe("guarded E2E bootstrap", () => {
 		expect(playwrightEnvironment.E2E_RP1_CLIENT_SECRET).toBe("rp-one-secret");
 		expect(playwrightEnvironment.E2E_RP2_CLIENT_ID).toBe("rp-two-id");
 		expect(playwrightEnvironment.E2E_RP2_CLIENT_SECRET).toBe("rp-two-secret");
+		expect(playwrightEnvironment.E2E_PHASE2_ORG_ID).toBe(
+			"phase2-matrix-org-id",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_SECOND_ORG_ID).toBe(
+			"phase2-second-org-id",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_PASSWORD).toBe(
+			"phase2-fixture-password-2026",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_ORG_ADMIN_EMAIL).toBe(
+			"phase2-org-admin@localhost.test",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_ORG_MOD_EMAIL).toBe(
+			"phase2-org-mod@localhost.test",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_ORG_MEMBER_EMAIL).toBe(
+			"phase2-org-member@localhost.test",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_INVITED_EMAIL).toBe(
+			"phase2-invited@localhost.test",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_INVITATION_ID).toBe(
+			"phase2-invitation-id",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_PLATFORM_MOD_EMAIL).toBe(
+			"phase2-platform-mod@localhost.test",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_PLATFORM_HR_EMAIL).toBe(
+			"phase2-platform-hr@localhost.test",
+		);
+		expect(playwrightEnvironment.E2E_PHASE2_BAN_TARGET_EMAIL).toBe(
+			"phase2-ban-target@localhost.test",
+		);
+		expect(matrixSeedCommand.captureStdout).toBe(true);
 		expect(adminSeedCommand.captureStdout).toBe(true);
 		expect(clientSeedCommand.captureStdout).toBe(true);
 	});
@@ -166,11 +220,32 @@ describe("guarded E2E bootstrap", () => {
 		expect(commands).not.toContain("Playwright E2E");
 	});
 
+	test("rejects unframed phase 2 matrix warnings instead of guessing at embedded JSON", async () => {
+		const commands: string[] = [];
+		const runner: HarnessCommandRunner = async (command) => {
+			commands.push(command.label);
+			if (command.label === "Disposable OAuth client seed") {
+				return SEEDED_CLIENTS;
+			}
+			return command.label === "Disposable Phase 2 matrix seed"
+				? `[env] warning\n${SEEDED_PHASE2_MATRIX}`
+				: "";
+		};
+
+		await expect(runE2E(validEnvironment(), runner)).rejects.toThrow(
+			"Phase 2 matrix seeding returned invalid JSON",
+		);
+		expect(commands).not.toContain("Playwright E2E");
+	});
+
 	test("does not start Playwright when fresh client credentials are unavailable", async () => {
 		const commands: string[] = [];
 		const runner: HarnessCommandRunner = async (command) => {
 			commands.push(command.label);
-			return command.label === "Disposable OAuth client seed" ? "[]" : "";
+			if (command.label === "Disposable OAuth client seed") return "[]";
+			return command.label === "Disposable Phase 2 matrix seed"
+				? SEEDED_PHASE2_MATRIX
+				: "";
 		};
 
 		await expect(runE2E(validEnvironment(), runner)).rejects.toThrow(

@@ -1,15 +1,17 @@
-import { auth } from "@krazil-idp/auth";
-import { headers } from "next/headers";
+import type { Route } from "next";
 import { redirect } from "next/navigation";
 
+import { requirePageSession } from "@/lib/server/session";
+
 /**
- * The IdP root is an entry point, not a landing page: signed-in users go to
- * their dashboard, everyone else to sign-in.
+ * The IdP root is a fixed destination resolver: verified platform admins land
+ * in platform administration and every other role lands in Applications.
  */
 export default async function Home() {
-	const session = await auth.api.getSession({
-		headers: await headers(),
-	});
-
-	redirect(session?.user ? "/dashboard" : "/sign-in");
+	const session = await requirePageSession();
+	redirect(
+		(session.user.platformRole === "admin"
+			? "/admin/platform"
+			: "/dashboard") as Route,
+	);
 }

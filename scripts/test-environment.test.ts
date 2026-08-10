@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+	assertDisposableDatabaseTarget,
 	formatDatabaseSummary,
 	validateDatabaseEnvironment,
 	validateE2EEnvironment,
@@ -166,6 +167,58 @@ describe("disposable PostgreSQL validation", () => {
 		expect(summary).not.toContain(DATABASE_PASSWORD);
 		expect(summary).not.toContain("postgresql://");
 		expect(summary).not.toContain("postgres@");
+	});
+});
+
+describe("disposable DATABASE_URL seed guard", () => {
+	const disposableUrl = `postgresql://postgres:${DATABASE_PASSWORD}@localhost:5432/krazil_idp_test`;
+
+	test("accepts the loopback disposable target", () => {
+		expect(
+			assertDisposableDatabaseTarget({ DATABASE_URL: disposableUrl }).pathname,
+		).toBe("/krazil_idp_test");
+	});
+
+	test.each([
+		{ name: "missing DATABASE_URL", overrides: { DATABASE_URL: undefined } },
+		{
+			name: "development database",
+			overrides: {
+				DATABASE_URL: `postgresql://postgres:${DATABASE_PASSWORD}@localhost:5432/krazil-idp`,
+			},
+		},
+		{
+			name: "remote host",
+			overrides: {
+				DATABASE_URL: `postgresql://postgres:${DATABASE_PASSWORD}@db.internal:5432/krazil_idp_test`,
+			},
+		},
+		{
+			name: "private-network host",
+			overrides: {
+				DATABASE_URL: `postgresql://postgres:${DATABASE_PASSWORD}@192.168.1.20:5432/krazil_idp_test`,
+			},
+		},
+		{
+			name: "malformed URL",
+			overrides: { DATABASE_URL: "not a database URL" },
+		},
+	])("rejects $name", ({ overrides }) => {
+		expect(() =>
+			assertDisposableDatabaseTarget(validEnvironment(overrides)),
+		).toThrow("Test safety validation failed");
+	});
+
+	test("fails closed even when the harness pair itself validates", () => {
+		// validateDatabaseEnvironment passing must not imply the seed guard
+		// passes: the guard checks the URL @krazil-idp/db actually consumes.
+		const environment = validEnvironment({
+			DATABASE_URL: `postgresql://postgres:${DATABASE_PASSWORD}@localhost:5432/krazil-idp`,
+		});
+		expect(() => validateDatabaseEnvironment(environment)).not.toThrow();
+		expect(() => assertDisposableDatabaseTarget(environment)).toThrow(
+			"Test safety validation failed",
+		);
 	});
 });
 

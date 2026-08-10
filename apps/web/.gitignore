@@ -35,6 +35,11 @@
 *.pem
 *.local
 
+# E2E fixture seed outputs (contain the known fixture password / ephemeral
+# client secrets); generated on demand, never committed.
+clients.json
+phase2.json
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

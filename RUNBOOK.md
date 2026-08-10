@@ -137,6 +137,22 @@ last-admin and lock-order concurrency, invitations, JSONB audit metadata reads,
 scoped audit access, and delivered-only retention. Do not point these commands
 at development, staging, production, or a shared database.
 
+## Organization administration UI smoke
+
+Run the browser regression only through the guarded localhost harness. It verifies
+the disposable loopback target before recreating `krazil_idp_test`; it must never
+be pointed at development, staging, production, or a shared database.
+
+```bash
+bun run --cwd apps/test-rp test:e2e
+TWO_FACTOR_ENABLED=true bun run --cwd apps/test-rp test:e2e
+```
+
+The harness covers protected-route denial, safe post-login navigation, platform
+and organization administration, bounded moderator/HR navigation, invitation
+creation, and a 390×844 responsive keyboard-focus check. It uses only seeded
+localhost fixture accounts; do not substitute real credentials.
+
 ## Audit events
 
 The auth hook emits structured JSON for login (including `login.two_factor_failure`), token issuance/revocation, OAuth client create/update/delete and secret rotation, and consent grant/deny/revoke. Ship stdout to the production logging/SIEM pipeline. Audit records must not contain passwords, client secrets, tokens, authorization codes, or token-bearing email URLs.

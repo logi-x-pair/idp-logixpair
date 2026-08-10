@@ -3,11 +3,13 @@
 import { Button } from "@krazil-idp/ui/components/button";
 import { Input } from "@krazil-idp/ui/components/input";
 import { Label } from "@krazil-idp/ui/components/label";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { inOAuthFlow, withCurrentQuery } from "@/lib/oauth-flow";
+import type { SafeReturnPath } from "@/lib/server/session";
 
 type VerificationMethod = "totp" | "backup";
 
@@ -23,7 +25,11 @@ function redirectsToAnotherFactor(data: unknown): boolean {
 	);
 }
 
-export default function TwoFactorChallenge() {
+export default function TwoFactorChallenge({
+	postSignInPath,
+}: {
+	postSignInPath?: SafeReturnPath;
+}) {
 	const router = useRouter();
 	const [method, setMethod] = useState<VerificationMethod>("totp");
 	const [code, setCode] = useState("");
@@ -43,7 +49,7 @@ export default function TwoFactorChallenge() {
 		// In OAuth, the provider resumes the signed authorization flow after the
 		// verification endpoint sets the session cookie.
 		if (!inOAuthFlow()) {
-			router.push("/dashboard");
+			router.push((postSignInPath ?? "/") as Route);
 		}
 	};
 

@@ -64,6 +64,7 @@ export interface OrganizationMemberMutation {
 
 export interface LockedOrganizationUser {
 	id: string;
+	role: string;
 	banned: boolean | null;
 }
 

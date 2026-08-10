@@ -28,6 +28,20 @@ interface ClientSeedResult {
 	created: boolean;
 }
 
+interface Phase2MatrixResult {
+	password: string;
+	orgId: string;
+	secondOrgId: string;
+	orgAdminEmail: string;
+	orgModEmail: string;
+	orgMemberEmail: string;
+	invitedEmail: string;
+	invitationId: string;
+	platformModEmail: string;
+	platformHrEmail: string;
+	banTargetEmail: string;
+}
+
 const rpDirectory = import.meta.dir;
 const webDirectory = resolve(rpDirectory, "../web");
 
@@ -89,6 +103,33 @@ function ephemeralClientCredentials(
 	return { id: client.clientId, secret: client.clientSecret };
 }
 
+function phase2MatrixSeed(seedOutput: string): Phase2MatrixResult {
+	let result: Phase2MatrixResult;
+	try {
+		result = JSON.parse(seedOutput) as Phase2MatrixResult;
+	} catch {
+		throw new Error("Phase 2 matrix seeding returned invalid JSON");
+	}
+	for (const key of [
+		"password",
+		"orgId",
+		"secondOrgId",
+		"orgAdminEmail",
+		"orgModEmail",
+		"orgMemberEmail",
+		"invitedEmail",
+		"invitationId",
+		"platformModEmail",
+		"platformHrEmail",
+		"banTargetEmail",
+	] as const) {
+		if (!result[key]) {
+			throw new Error("Phase 2 matrix seeding returned incomplete JSON");
+		}
+	}
+	return result;
+}
+
 export async function runE2E(
 	environment: Environment,
 	runner: HarnessCommandRunner = runCommand,
@@ -132,12 +173,38 @@ export async function runE2E(
 	);
 	const rpOne = ephemeralClientCredentials(seedOutput, "Test RP One");
 	const rpTwo = ephemeralClientCredentials(seedOutput, "Test RP Two");
+	const matrixSeedOutput = await runner(
+		{
+			label: "Disposable Phase 2 matrix seed",
+			command: [
+				process.execPath,
+				"run",
+				"scripts/seed-phase2-matrix.ts",
+				"--json",
+			],
+			cwd: webDirectory,
+			captureStdout: true,
+		},
+		childEnvironment,
+	);
+	const phase2 = phase2MatrixSeed(matrixSeedOutput);
 	const playwrightEnvironment = {
 		...childEnvironment,
 		E2E_RP1_CLIENT_ID: rpOne.id,
 		E2E_RP1_CLIENT_SECRET: rpOne.secret,
 		E2E_RP2_CLIENT_ID: rpTwo.id,
 		E2E_RP2_CLIENT_SECRET: rpTwo.secret,
+		E2E_PHASE2_PASSWORD: phase2.password,
+		E2E_PHASE2_ORG_ID: phase2.orgId,
+		E2E_PHASE2_SECOND_ORG_ID: phase2.secondOrgId,
+		E2E_PHASE2_ORG_ADMIN_EMAIL: phase2.orgAdminEmail,
+		E2E_PHASE2_ORG_MOD_EMAIL: phase2.orgModEmail,
+		E2E_PHASE2_ORG_MEMBER_EMAIL: phase2.orgMemberEmail,
+		E2E_PHASE2_INVITED_EMAIL: phase2.invitedEmail,
+		E2E_PHASE2_INVITATION_ID: phase2.invitationId,
+		E2E_PHASE2_PLATFORM_MOD_EMAIL: phase2.platformModEmail,
+		E2E_PHASE2_PLATFORM_HR_EMAIL: phase2.platformHrEmail,
+		E2E_PHASE2_BAN_TARGET_EMAIL: phase2.banTargetEmail,
 	};
 	validatePlaywrightEnvironment(playwrightEnvironment);
 	await runner(
